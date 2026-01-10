@@ -39,13 +39,15 @@
 
 - [开发设置](./docs/development/setup.md) - 环境配置和开发指南
 - [开发计划](./docs/development/plan.md) - 分阶段开发计划和任务清单
+- [代码风格指南](./docs/development/code-styleguide.md) - 代码风格规范和最佳实践
+- [测试指南](./docs/development/testing.md) - 功能测试步骤和检查清单
 
 ## 开发进度
 
 ### 整体进度
 
 - [x] **Phase 1: 项目初始化** 🏗️ (14/14) ✅
-- [ ] **Phase 2: Agent 引擎核心** 🔧 (0/18)
+- [x] **Phase 2: Agent 引擎核心** 🔧 (18/18) ✅
 - [ ] **Phase 3: 对话 UI** 💬 (0/17)
 - [ ] **Phase 4: Session 管理** 📚 (0/13)
 - [ ] **Phase 5: 配置功能** ⚙️ (0/35)
@@ -56,7 +58,7 @@
 - [ ] **Phase 7: UI/UX 优化** ✨ (0/13)
 - [ ] **Phase 8: 测试和文档** 📝 (0/10)
 
-**总进度**: 14/130 任务完成
+**总进度**: 32/130 任务完成
 
 ### 里程碑状态
 
@@ -66,15 +68,104 @@
 
 ### 最近更新
 
+- **2024-12-XX**: Phase 2 完成 + OpenRouter 集成 ✅
+  - 实现 ReAct Agent 引擎核心功能
+  - 集成 LangGraph 和工具系统
+  - 创建 Chat API 端点（支持流式输出）
+  - **集成 OpenRouter API**: 替换 OpenAI，使用 OpenRouter 统一接口
+    - 当前模型: `google/gemini-3-flash-preview`
+    - API Key 已配置在 `.env.local`
+  - **修复 DaisyUI 集成**: 升级到 DaisyUI 5.5.14，配置 PostCSS 和 @tailwindcss/postcss
+  - **测试**: 运行 `./scripts/test-verification.sh` 所有基础测试通过 ✅
+    - ✓ 构建测试通过
+    - ✓ 计算器工具测试通过（加法、乘法、除法、除零错误处理）
+    - ✓ 工具注册表测试通过（注册、获取、清空）
+    - ✓ Agent Graph 创建测试通过
+    - ✓ OpenRouter API 集成测试通过（直接测试脚本成功）
+    - ✓ Chat API 功能测试通过（使用 Gemini 3 Flash Preview 模型）
+  - **配置**: `.env.local` 已配置 OpenRouter API Key 和模型
+
 - **2024-12-XX**: Phase 1 完成 ✅
   - 初始化 Next.js 项目（Tailwind 4 + DaisyUI）
   - 创建基础布局组件（Sidebar + Page）
   - 配置路由（/agents, /settings）
-  - 项目构建测试通过
+  - **测试**: 运行 `npm run build` 构建成功 ✅
+  - **测试**: 所有路由正常工作 ✅
 
 ---
 
 *详细任务清单请查看 [开发计划](./docs/development/plan.md)*
+
+## 开发规范
+
+### 代码风格指南
+
+**所有代码必须遵循 [代码风格指南](./docs/development/code-styleguide.md)**
+
+代码风格指南包含以下核心规范：
+
+1. **TypeScript 类型安全**
+   - 不轻易使用 `any` 和 lint disable
+   - 保持类型严谨性
+   - 详细规范请查看 [代码风格指南 - TypeScript 规范](./docs/development/code-styleguide.md#typescript-规范)
+
+2. **错误处理机制**
+   - 使用统一的 Result 模式处理错误（`lib/utils/errors.ts`）
+   - 避免频繁使用 try-catch
+   - 详细规范请查看 [代码风格指南 - 错误处理](./docs/development/code-styleguide.md#错误处理)
+
+3. **函数设计**
+   - 函数不超过 100 行
+   - 单一职责原则
+   - 详细规范请查看 [代码风格指南 - 函数设计](./docs/development/code-styleguide.md#函数设计)
+
+4. **代码可读性**
+   - 清晰的命名
+   - 合理的代码组织
+   - 有意义的注释
+   - 详细规范请查看 [代码风格指南 - 代码可读性](./docs/development/code-styleguide.md#代码可读性)
+
+5. **其他规范**
+   - 命名规范、文件组织、导入顺序、类型定义、测试规范等
+   - 详细内容请查看 [代码风格指南](./docs/development/code-styleguide.md)
+
+---
+
+### 测试要求
+
+**重要原则：每个功能完成后必须测试通过才能继续下一个功能或阶段**
+
+#### 测试流程
+
+1. **功能完成时**
+   - 必须提供可测试的方式（例如：启动开发服务器、运行测试命令、手动测试步骤等）
+   - 必须自己完成测试验证
+   - 测试通过后才能标记任务为完成
+
+2. **测试内容**
+   - 功能是否按预期工作
+   - 是否有明显的错误或 Bug
+   - 是否影响现有功能
+   - 代码是否能正常构建
+
+3. **测试记录**
+   - 在完成功能时，记录测试方式和测试结果
+   - 在 `AGENTS.md` 的"最近更新"中记录测试情况
+   - 如有问题，必须先修复再继续
+
+4. **阶段完成时**
+   - 整个 Phase 完成后，必须进行完整的集成测试
+   - 确保所有功能协同工作正常
+   - 测试通过后才能进入下一个 Phase
+
+#### 测试方式示例
+
+- **前端功能**: 启动 `npm run dev`，在浏览器中手动测试
+- **API 功能**: 使用 curl、Postman 或编写简单测试脚本
+- **构建测试**: 运行 `npm run build` 确保构建成功
+- **类型检查**: 运行 TypeScript 类型检查确保无类型错误
+
+---
 
 ## 需求变更管理
 

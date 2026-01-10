@@ -23,24 +23,24 @@
 
 ### Phase 2: Agent 引擎核心 🔧
 
-- [ ] 安装 `@langchain/langgraph`
-- [ ] 安装 `@langchain/mcp-adapters`
-- [ ] 安装 LangChain 核心包（@langchain/core）
-- [ ] 创建 `lib/agent/types.ts`（定义 Agent 相关类型）
-- [ ] 创建 `lib/llm/client.ts`（LLM 客户端封装，支持多模型）
-- [ ] 实现基础的 LLM 调用（至少支持 OpenAI）
-- [ ] 创建 `lib/agent/graph.ts`（LangGraph ReAct 循环）
-- [ ] 实现 Thought 节点（思考步骤）
-- [ ] 实现 Tool Call 节点（工具调用）
-- [ ] 实现 Observation 节点（观察结果）
-- [ ] 实现 ReAct 循环逻辑（Thought -> Tool Call -> Observation -> Thought）
-- [ ] 创建 `lib/tools/types.ts`（工具类型定义）
-- [ ] 创建 `lib/tools/registry.ts`（工具注册表）
-- [ ] 实现工具调用逻辑（支持动态工具）
-- [ ] 创建 `app/api/chat/route.ts`（API Route）
-- [ ] 实现流式输出支持（Server-Sent Events）
-- [ ] 实现错误处理和重试机制
-- [ ] 测试 Agent 引擎（简单对话测试）
+- [x] 安装 `@langchain/langgraph`
+- [x] 安装 `@langchain/mcp-adapters`
+- [x] 安装 LangChain 核心包（@langchain/core）
+- [x] 创建 `lib/agent/types.ts`（定义 Agent 相关类型）
+- [x] 创建 `lib/llm/client.ts`（LLM 客户端封装，支持多模型）
+- [x] 实现基础的 LLM 调用（至少支持 OpenAI）
+- [x] 创建 `lib/agent/graph.ts`（LangGraph ReAct 循环）
+- [x] 实现 Thought 节点（思考步骤）
+- [x] 实现 Tool Call 节点（工具调用）
+- [x] 实现 Observation 节点（观察结果）
+- [x] 实现 ReAct 循环逻辑（Thought -> Tool Call -> Observation -> Thought）
+- [x] 创建 `lib/tools/types.ts`（工具类型定义）
+- [x] 创建 `lib/tools/registry.ts`（工具注册表）
+- [x] 实现工具调用逻辑（支持动态工具）
+- [x] 创建 `app/api/chat/route.ts`（API Route）
+- [x] 实现流式输出支持（Server-Sent Events）
+- [x] 实现错误处理和重试机制
+- [x] 测试 Agent 引擎（简单对话测试）
 
 ---
 
@@ -225,6 +225,33 @@
 3. 在本文档中更新任务清单（添加/删除/修改任务）
 4. 在 `AGENTS.md` 中记录变更历史
 5. 确保所有文档保持一致
+
+---
+
+## 开发规范
+
+### 代码风格
+
+**所有代码必须遵循 [代码风格指南](./code-styleguide.md)**
+
+核心要求：
+- ✅ TypeScript 类型安全：不轻易使用 `any` 和 lint disable
+- ✅ 错误处理：使用统一的 Result 模式（`lib/utils/errors.ts`），避免频繁使用 try-catch
+- ✅ 函数设计：函数不超过 100 行，保持单一职责
+- ✅ 代码可读性：清晰的命名、合理的组织、有意义的注释
+
+详细规范请查看 [代码风格指南](./code-styleguide.md)。
+
+### 测试要求
+
+**每个功能完成后必须测试通过才能继续下一个功能或阶段**
+
+- 功能完成时，必须提供可测试的方式并自己完成测试
+- 测试通过后才能标记任务为完成
+- 阶段完成时，必须进行完整的集成测试
+- 测试结果需要在 `AGENTS.md` 中记录
+
+详细测试要求请查看 [AGENTS.md](../AGENTS.md#开发规范) 中的测试要求部分。
 
 ---
 
