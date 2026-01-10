@@ -4,20 +4,20 @@
 
 ### Phase 1: 项目初始化 🏗️
 
-- [ ] 使用 `npx create-next-app@latest` 初始化 Next.js 项目（App Router）
-- [ ] 配置 TypeScript（tsconfig.json）
-- [ ] 安装和配置 Tailwind CSS
-- [ ] 安装和配置 DaisyUI
-- [ ] 安装 React Icons（react-icons）
-- [ ] 配置 ESLint 和 Prettier
-- [ ] 创建项目目录结构（components, lib, app, types 等）
-- [ ] 创建基础布局组件 `components/layout/Sidebar.tsx`
-- [ ] 创建基础布局组件 `components/layout/Page.tsx`
-- [ ] 创建主布局 `app/layout.tsx`（包含 Sidebar + Page）
-- [ ] 创建路由 `/app/agents/page.tsx`（对话页面占位）
-- [ ] 创建路由 `/app/settings/page.tsx`（设置页面占位）
-- [ ] 配置 Sidebar 菜单项（Agents、设置）
-- [ ] 测试基础布局和路由
+- [x] 使用 `npx create-next-app@latest` 初始化 Next.js 项目（App Router）
+- [x] 配置 TypeScript（tsconfig.json）
+- [x] 安装和配置 Tailwind CSS（Tailwind 4，无需配置文件）
+- [x] 安装和配置 DaisyUI（在 CSS 中使用 @plugin）
+- [x] 安装 React Icons（react-icons）
+- [x] 配置 ESLint 和 Prettier
+- [x] 创建项目目录结构（components, lib, app, types 等）
+- [x] 创建基础布局组件 `components/layout/Sidebar.tsx`
+- [x] 创建基础布局组件 `components/layout/Page.tsx`
+- [x] 创建主布局 `app/layout.tsx`（包含 Sidebar + Page）
+- [x] 创建路由 `/app/agents/page.tsx`（对话页面占位）
+- [x] 创建路由 `/app/settings/page.tsx`（设置页面占位）
+- [x] 配置 Sidebar 菜单项（Agents、设置）
+- [x] 测试基础布局和路由
 
 ---
 
