@@ -14,6 +14,7 @@ import {
   updateSession,
   setCurrentSessionId,
 } from "@/lib/session/storage";
+import { getMCPConfig } from "@/lib/mcp/storage";
 
 export default function ChatContainer() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -87,6 +88,49 @@ export default function ChatContainer() {
     const currentId = getCurrentSessionId();
     loadSessionMessages(currentId);
   }, [loadSessionMessages]);
+
+  // 初始化：加载 MCP 工具
+  useEffect(() => {
+    const loadMCPTools = async () => {
+      const configResult = getMCPConfig();
+      if (!configResult.success) {
+        console.warn("[ChatContainer] Failed to get MCP config:", configResult.error);
+        return;
+      }
+
+      const config = configResult.value;
+      // 检查是否有配置
+      const hasConfig = config.mcpServers 
+        ? Object.keys(config.mcpServers).length > 0
+        : Object.keys(config).filter(key => key !== "mcpServers").length > 0;
+
+      if (!hasConfig) {
+        return; // 没有配置，跳过
+      }
+
+      try {
+        const response = await fetch("/api/mcp/load", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ config }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log("[ChatContainer] MCP tools loaded:", data);
+        } else {
+          const errorData = await response.json().catch(() => ({ error: "加载失败" }));
+          console.warn("[ChatContainer] Failed to load MCP tools:", errorData.error);
+        }
+      } catch (error) {
+        console.error("[ChatContainer] Error loading MCP tools:", error);
+      }
+    };
+
+    loadMCPTools();
+  }, []); // 只在组件挂载时执行一次
 
   // 监听 localStorage 变化（跨标签页同步和 Session 切换）
   useEffect(() => {

@@ -86,7 +86,7 @@ export default function MCPConfigEditor({
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!validateJson(jsonContent)) {
       return;
     }
@@ -95,6 +95,26 @@ export default function MCPConfigEditor({
       const parsed = JSON.parse(jsonContent) as MCPConfig;
       const result = saveMCPConfig(parsed);
       if (result.success) {
+        // 重新加载工具到注册表
+        try {
+          const response = await fetch("/api/mcp/load", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ config: parsed }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            console.log("[MCPConfigEditor] MCP tools reloaded:", data);
+          } else {
+            console.warn("[MCPConfigEditor] Failed to reload MCP tools");
+          }
+        } catch (error) {
+          console.error("[MCPConfigEditor] Error reloading MCP tools:", error);
+        }
+
         onSave();
         onClose();
       } else {

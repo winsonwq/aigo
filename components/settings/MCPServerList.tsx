@@ -9,6 +9,29 @@ import type { MCPConfig, MCPServerConfig, MCPServerInfo, MCPTool } from "@/lib/m
 import { getMCPConfig, saveMCPConfig } from "@/lib/mcp/storage";
 import ConfirmModal from "@/components/common/ConfirmModal";
 
+// 重新加载 MCP 工具到注册表
+async function reloadMCPTools(config: MCPConfig) {
+  try {
+    const response = await fetch("/api/mcp/load", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ config }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log("[MCPServerList] MCP tools reloaded:", data);
+    } else {
+      const errorData = await response.json().catch(() => ({ error: "加载失败" }));
+      console.warn("[MCPServerList] Failed to reload MCP tools:", errorData.error);
+    }
+  } catch (error) {
+    console.error("[MCPServerList] Error reloading MCP tools:", error);
+  }
+}
+
 export default function MCPServerList() {
   const [servers, setServers] = useState<MCPServerInfo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -156,6 +179,8 @@ export default function MCPServerList() {
         // 切换启用状态后，刷新工具（延迟一下确保配置已保存）
         setTimeout(() => {
           loadServers(true);
+          // 重新加载工具到注册表
+          reloadMCPTools(config);
         }, 100);
       }
     },
@@ -199,6 +224,8 @@ export default function MCPServerList() {
       // 删除后刷新工具（延迟一下确保配置已保存）
       setTimeout(() => {
         loadServers(true);
+        // 重新加载工具到注册表
+        reloadMCPTools(config);
       }, 100);
     }
 
