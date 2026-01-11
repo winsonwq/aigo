@@ -1,18 +1,119 @@
 "use client";
 
 // 对话容器组件
-// 管理对话状态、消息列表和输入框
+// 管理对话状态、消息列表和输入框，集成 Session 管理
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import MessageList from "./MessageList";
 import ChatInput from "./ChatInput";
 import type { ChatMessage } from "./types";
+import {
+  getCurrentSessionId,
+  getSession,
+  createSession,
+  updateSession,
+  setCurrentSessionId,
+} from "@/lib/session/storage";
 
 export default function ChatContainer() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [currentSessionId, setCurrentSessionIdState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // 加载当前 Session 的消息
+  const loadSessionMessages = useCallback(async (sessionId: string | null) => {
+    if (!sessionId) {
+      // 如果没有当前会话，创建新会话
+      const result = createSession();
+      if (result.success) {
+        setCurrentSessionId(result.value.id);
+        setCurrentSessionIdState(result.value.id);
+        setMessages([]);
+      }
+      return;
+    }
+
+    const result = getSession(sessionId);
+    if (result.success && result.value) {
+      setMessages(result.value.messages);
+      setCurrentSessionIdState(sessionId);
+    } else {
+      // Session 不存在，创建新会话
+      const newResult = createSession();
+      if (newResult.success) {
+        setCurrentSessionId(newResult.value.id);
+        setCurrentSessionIdState(newResult.value.id);
+        setMessages([]);
+      }
+    }
+  }, []);
+
+  // 保存消息到 Session
+  const saveMessagesToSession = useCallback(
+    (sessionId: string | null, newMessages: ChatMessage[]) => {
+      if (!sessionId) return;
+
+      const result = getSession(sessionId);
+      if (!result.success || !result.value) return;
+
+      const updatedSession = {
+        ...result.value,
+        messages: newMessages,
+      };
+
+      updateSession(updatedSession);
+
+      // 如果是第一条用户消息，自动更新标题
+      const firstUserMessage = newMessages.find((msg) => msg.role === "user");
+      if (firstUserMessage && result.value.messages.length === 0) {
+        const title = firstUserMessage.content.slice(0, 30).trim();
+        if (title) {
+          updateSession({
+            ...updatedSession,
+            title: title.length < firstUserMessage.content.length ? `${title}...` : title,
+          });
+        }
+      }
+    },
+    []
+  );
+
+  // 初始化：加载当前 Session
+  useEffect(() => {
+    const currentId = getCurrentSessionId();
+    loadSessionMessages(currentId);
+  }, [loadSessionMessages]);
+
+  // 监听 localStorage 变化（跨标签页同步和 Session 切换）
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "aigo_current_session_id") {
+        const newSessionId = e.newValue;
+        if (newSessionId !== currentSessionId) {
+          loadSessionMessages(newSessionId);
+        }
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, [currentSessionId, loadSessionMessages]);
+
+  // 监听自定义事件（同标签页内 Session 切换）
+  useEffect(() => {
+    const handleSessionChanged = (e: Event) => {
+      const customEvent = e as CustomEvent<{ sessionId: string | null }>;
+      const newSessionId = customEvent.detail?.sessionId ?? null;
+      if (newSessionId !== currentSessionId) {
+        loadSessionMessages(newSessionId);
+      }
+    };
+
+    window.addEventListener("session-changed", handleSessionChanged);
+    return () => window.removeEventListener("session-changed", handleSessionChanged);
+  }, [currentSessionId, loadSessionMessages]);
 
   // 自动滚动到底部
   const scrollToBottom = () => {
@@ -37,7 +138,12 @@ export default function ChatContainer() {
       timestamp: Date.now(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
+    
+    // 立即保存用户消息
+    saveMessagesToSession(currentSessionId, newMessages);
+    
     setIsLoading(true);
     setError(null);
 
@@ -52,7 +158,8 @@ export default function ChatContainer() {
       reactSteps: [], // 初始化空数组，流式过程中会逐步添加步骤
     };
 
-    setMessages((prev) => [...prev, aiMessage]);
+    const messagesWithAI = [...newMessages, aiMessage];
+    setMessages(messagesWithAI);
 
     try {
       // 准备历史消息（转换为 API 格式）
@@ -112,16 +219,21 @@ export default function ChatContainer() {
               
               if (data === "[DONE]") {
                 // 流结束
-                setMessages((prev) =>
-                  prev.map((msg) =>
+                setMessages((prev) => {
+                  const updated = prev.map((msg) =>
                     msg.id === aiMessageId
                       ? {
                           ...msg,
                           isLoading: false,
                         }
                       : msg
-                  )
-                );
+                  );
+                  
+                  // 保存最终消息到 Session
+                  saveMessagesToSession(currentSessionId, updated);
+                  
+                  return updated;
+                });
                 return;
               }
 
@@ -134,7 +246,7 @@ export default function ChatContainer() {
                   
                   // 使用函数式更新确保获取最新状态，并保持 isLoading 状态
                   setMessages((prev) => {
-                    return prev.map((msg) => {
+                    const updated = prev.map((msg) => {
                       if (msg.id === aiMessageId) {
                         return {
                           ...msg,
@@ -144,6 +256,11 @@ export default function ChatContainer() {
                       }
                       return msg;
                     });
+                    
+                    // 实时保存到 Session
+                    saveMessagesToSession(currentSessionId, updated);
+                    
+                    return updated;
                   });
                 }
 
@@ -192,7 +309,7 @@ export default function ChatContainer() {
 
         // 流结束，标记为完成
         setMessages((prev) => {
-          return prev.map((msg) => {
+          const updated = prev.map((msg) => {
             if (msg.id === aiMessageId) {
               return {
                 ...msg,
@@ -202,13 +319,18 @@ export default function ChatContainer() {
             }
             return msg;
           });
+          
+          // 保存最终消息到 Session
+          saveMessagesToSession(currentSessionId, updated);
+          
+          return updated;
         });
       } else {
         // 非流式响应（回退）
         const data = await response.json();
         
-        setMessages((prev) =>
-          prev.map((msg) =>
+        setMessages((prev) => {
+          const updated = prev.map((msg) =>
             msg.id === aiMessageId
               ? {
                   ...msg,
@@ -216,16 +338,21 @@ export default function ChatContainer() {
                   isLoading: false,
                 }
               : msg
-          )
-        );
+          );
+          
+          // 保存消息到 Session
+          saveMessagesToSession(currentSessionId, updated);
+          
+          return updated;
+        });
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       setError(errorMessage);
       
       // 更新 AI 消息显示错误
-      setMessages((prev) =>
-        prev.map((msg) =>
+      setMessages((prev) => {
+        const updated = prev.map((msg) =>
           msg.id === aiMessageId
             ? {
                 ...msg,
@@ -234,8 +361,13 @@ export default function ChatContainer() {
                 error: errorMessage,
               }
             : msg
-        )
-      );
+        );
+        
+        // 保存错误状态到 Session
+        saveMessagesToSession(currentSessionId, updated);
+        
+        return updated;
+      });
     } finally {
       setIsLoading(false);
     }

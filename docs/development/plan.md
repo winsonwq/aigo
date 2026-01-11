@@ -69,20 +69,20 @@
 
 ### Phase 4: Session 管理 📚
 
-- [ ] 创建 `lib/session/types.ts`（Session 数据类型）
-- [ ] 创建 `lib/session/storage.ts`（Session 存储层，使用 localStorage）
-- [ ] 实现 Session CRUD 操作（创建、读取、更新、删除）
-- [ ] 实现对话历史存储（保存到 Session）
-- [ ] 创建 `components/sidebar/SessionList.tsx`（会话列表组件）
-- [ ] 在 Sidebar 中集成 SessionList
-- [ ] 实现新建会话功能（按钮 + 逻辑）
-- [ ] 实现会话切换功能（点击切换当前会话）
-- [ ] 实现会话重命名功能（双击或右键菜单）
-- [ ] 实现会话删除功能（右键菜单或删除按钮）
-- [ ] 实现当前会话高亮显示
-- [ ] 实现会话持久化（页面刷新后恢复）
-- [ ] 在对话页面加载时恢复会话历史
-- [ ] 测试 Session 管理功能
+- [x] 创建 `lib/session/types.ts`（Session 数据类型）
+- [x] 创建 `lib/session/storage.ts`（Session 存储层，使用 localStorage）
+- [x] 实现 Session CRUD 操作（创建、读取、更新、删除）
+- [x] 实现对话历史存储（保存到 Session）
+- [x] 创建 `components/sidebar/SessionList.tsx`（会话列表组件）
+- [x] 在 Sidebar 中集成 SessionList
+- [x] 实现新建会话功能（按钮 + 逻辑）
+- [x] 实现会话切换功能（点击切换当前会话）
+- [x] 实现会话重命名功能（双击或右键菜单）
+- [x] 实现会话删除功能（右键菜单或删除按钮）
+- [x] 实现当前会话高亮显示
+- [x] 实现会话持久化（页面刷新后恢复）
+- [x] 在对话页面加载时恢复会话历史
+- [x] 测试 Session 管理功能
 
 ---
 
