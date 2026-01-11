@@ -1,24 +1,12 @@
 "use client";
 
-import Link from "next/link";
-import { HiArrowLeft } from "react-icons/hi2";
-
 export default function GeneralSettingsPage() {
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-base-300 p-4">
-        <div className="flex items-center gap-4">
-          <Link
-            href="/settings"
-            className="btn btn-ghost btn-sm btn-circle"
-            title="返回设置"
-          >
-            <HiArrowLeft className="h-5 w-5" />
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold">基础设置</h1>
-            <p className="text-sm text-base-content/70">系统基础配置和通用设置</p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold">基础设置</h1>
+          <p className="text-sm text-base-content/70">系统基础配置和通用设置</p>
         </div>
       </div>
       <div className="flex-1 overflow-y-auto p-6">

@@ -1,85 +1,87 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
-  HiChatBubbleLeftRight,
+  HiBars3,
+  HiMagnifyingGlass,
+  HiPencil,
   HiCog6Tooth,
   HiServer,
   HiCodeBracket,
   HiCpuChip,
-  HiChevronDown,
-  HiChevronRight,
 } from "react-icons/hi2";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import SessionList from "@/components/sidebar/SessionList";
+import { createSession, setCurrentSessionId } from "@/lib/session/storage";
 
-interface MenuItem {
+interface SettingsMenuItem {
   name: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
-  children?: MenuItem[];
 }
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set());
+  const [isSettingsDropdownOpen, setIsSettingsDropdownOpen] = useState(false);
+  const settingsDropdownRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
+  const router = useRouter();
 
-  const menuItems: MenuItem[] = [
+  const settingsMenuItems: SettingsMenuItem[] = [
     {
-      name: "Chat",
-      href: "/chat",
-      icon: HiChatBubbleLeftRight,
+      name: "基础设置",
+      href: "/settings/general",
+      icon: HiCog6Tooth,
     },
     {
-      name: "设置",
-      href: "/settings",
-      icon: HiCog6Tooth,
-      children: [
-        {
-          name: "基础设置",
-          href: "/settings/general",
-          icon: HiCog6Tooth,
-        },
-        {
-          name: "MCP 配置",
-          href: "/settings/mcp",
-          icon: HiServer,
-        },
-        {
-          name: "Skills 配置",
-          href: "/settings/skills",
-          icon: HiCodeBracket,
-        },
-        {
-          name: "模型配置",
-          href: "/settings/models",
-          icon: HiCpuChip,
-        },
-      ],
+      name: "MCP 配置",
+      href: "/settings/mcp",
+      icon: HiServer,
+    },
+    {
+      name: "Skills 配置",
+      href: "/settings/skills",
+      icon: HiCodeBracket,
+    },
+    {
+      name: "模型配置",
+      href: "/settings/models",
+      icon: HiCpuChip,
     },
   ];
 
   const isChatPage = pathname === "/chat" || pathname.startsWith("/chat/");
   const isSettingsPage = pathname.startsWith("/settings");
 
-  // 自动展开当前激活的菜单
+  // 点击外部关闭 dropdown
   useEffect(() => {
-    if (isSettingsPage) {
-      setExpandedMenus(new Set(["设置"]));
-    }
-  }, [pathname, isSettingsPage]);
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        settingsDropdownRef.current &&
+        !settingsDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsSettingsDropdownOpen(false);
+      }
+    };
 
-  // 切换菜单展开/折叠
-  const toggleMenu = (menuName: string) => {
-    const newExpanded = new Set(expandedMenus);
-    if (newExpanded.has(menuName)) {
-      newExpanded.delete(menuName);
-    } else {
-      newExpanded.add(menuName);
+    if (isSettingsDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
     }
-    setExpandedMenus(newExpanded);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isSettingsDropdownOpen]);
+
+  // 处理新建会话
+  const handleNewChat = () => {
+    const result = createSession();
+    if (result.success) {
+      setCurrentSessionId(result.value.id);
+      // 导航到聊天页面
+      router.push("/chat");
+    }
   };
 
   return (
@@ -89,105 +91,94 @@ export default function Sidebar() {
       }`}
     >
       <div className="flex h-full flex-col">
-        {/* Header */}
-        <div className="flex h-16 items-center justify-between border-b border-base-300 px-4">
-          {!collapsed && <h1 className="text-xl font-bold">AIGO</h1>}
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="btn btn-ghost btn-sm"
-          >
-            {collapsed ? "→" : "←"}
-          </button>
+        {/* 顶部区域：汉堡菜单、搜索、New Chat 按钮 */}
+        <div className="border-b border-base-300">
+          {/* 顶部工具栏 */}
+          <div className="flex h-12 items-center justify-between px-3 gap-2">
+            <button
+              onClick={() => setCollapsed(!collapsed)}
+              className="btn btn-ghost btn-sm btn-square"
+              title={collapsed ? "展开侧边栏" : "收起侧边栏"}
+            >
+              <HiBars3 className="h-5 w-5" />
+            </button>
+            {!collapsed && (
+              <button
+                className="btn btn-ghost btn-sm btn-square"
+                title="搜索"
+              >
+                <HiMagnifyingGlass className="h-5 w-5" />
+              </button>
+            )}
+          </div>
+
+          {/* New Chat 按钮 */}
+          {!collapsed && (
+            <div className="px-3 pb-3">
+              <button
+                onClick={handleNewChat}
+                className="btn btn-primary btn-sm w-full gap-2"
+              >
+                <HiPencil className="h-4 w-4" />
+                <span>新的对话</span>
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* 菜单区域 */}
-        <nav className="flex-1 overflow-y-auto p-4">
-          <ul className="space-y-1">
-            {menuItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-              const hasChildren = item.children && item.children.length > 0;
-              const isExpanded = expandedMenus.has(item.name);
-
-              return (
-                <li key={item.name}>
-                  <div>
-                    {hasChildren ? (
-                      <>
-                        <button
-                          onClick={() => !collapsed && toggleMenu(item.name)}
-                          className={`flex items-center gap-3 rounded-lg px-4 py-3 w-full transition-colors ${
-                            isActive
-                              ? "bg-primary text-primary-content"
-                              : "hover:bg-base-300"
-                          }`}
-                          title={collapsed ? item.name : undefined}
-                        >
-                          <Icon className="h-5 w-5 flex-shrink-0" />
-                          {!collapsed && (
-                            <>
-                              <span className="flex-1 text-left">{item.name}</span>
-                              {isExpanded ? (
-                                <HiChevronDown className="h-4 w-4" />
-                              ) : (
-                                <HiChevronRight className="h-4 w-4" />
-                              )}
-                            </>
-                          )}
-                        </button>
-                        {!collapsed && isExpanded && item.children && (
-                          <ul className="ml-4 mt-1 space-y-1">
-                            {item.children.map((child) => {
-                              const ChildIcon = child.icon;
-                              const isChildActive =
-                                pathname === child.href || pathname.startsWith(child.href + "/");
-
-                              return (
-                                <li key={child.name}>
-                                  <Link
-                                    href={child.href}
-                                    className={`flex items-center gap-3 rounded-lg px-4 py-2 transition-colors ${
-                                      isChildActive
-                                        ? "bg-primary/20 text-primary"
-                                        : "hover:bg-base-300"
-                                    }`}
-                                  >
-                                    <ChildIcon className="h-4 w-4 flex-shrink-0" />
-                                    <span>{child.name}</span>
-                                  </Link>
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        )}
-                      </>
-                    ) : (
-                      <Link
-                        href={item.href}
-                        className={`flex items-center gap-3 rounded-lg px-4 py-3 transition-colors ${
-                          isActive
-                            ? "bg-primary text-primary-content"
-                            : "hover:bg-base-300"
-                        }`}
-                        title={collapsed ? item.name : undefined}
-                      >
-                        <Icon className="h-5 w-5 flex-shrink-0" />
-                        {!collapsed && <span>{item.name}</span>}
-                      </Link>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
-
-        {/* Chat 页面时在底部显示 Session 列表 */}
-        {isChatPage && (
-          <div className="border-t border-base-300 flex-1 overflow-hidden flex flex-col">
+        {/* 中间区域：Chats 列表（始终显示） */}
+        <div className="flex-1 overflow-hidden flex flex-col border-b border-base-300">
+            {!collapsed && (
+              <div className="px-3 py-2 text-sm font-semibold text-base-content/70">
+                会话
+              </div>
+            )}
+          <div className="flex-1 overflow-hidden">
             <SessionList collapsed={collapsed} />
           </div>
-        )}
+        </div>
+
+        {/* 底部区域：Settings & help */}
+        <div className="border-t border-base-300 p-3">
+          <div
+            className={`dropdown dropdown-top w-full ${isSettingsDropdownOpen ? "dropdown-open" : ""}`}
+            ref={settingsDropdownRef}
+          >
+            <button
+              tabIndex={0}
+              role="button"
+              onClick={() => setIsSettingsDropdownOpen(!isSettingsDropdownOpen)}
+              className={`btn btn-ghost btn-sm w-full ${
+                collapsed ? "btn-square" : "justify-start gap-2"
+              } ${isSettingsPage ? "btn-active" : ""}`}
+              title={collapsed ? "设置" : undefined}
+            >
+              <HiCog6Tooth className="h-5 w-5" />
+              {!collapsed && <span>设置</span>}
+            </button>
+            <ul
+              tabIndex={0}
+              className="dropdown-content menu bg-base-200 rounded-box z-[1] w-52 p-2 shadow-lg border border-base-300 mb-2"
+            >
+              {settingsMenuItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+                return (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      className={isActive ? "active" : ""}
+                      onClick={() => setIsSettingsDropdownOpen(false)}
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span>{item.name}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -1,17 +1,25 @@
 "use client";
 
 // 输入框组件
-// 支持多行输入、发送快捷键（Enter/Cmd+Enter）
+// 支持多行输入、发送快捷键（Enter/Cmd+Enter）、取消按钮
 
 import { useState, KeyboardEvent, useRef, useEffect } from "react";
 import { FiSend } from "react-icons/fi";
+import { HiStop } from "react-icons/hi2";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
+  onCancel?: () => void;
+  isLoading?: boolean;
   disabled?: boolean;
 }
 
-export default function ChatInput({ onSend, disabled = false }: ChatInputProps) {
+export default function ChatInput({ 
+  onSend, 
+  onCancel, 
+  isLoading = false,
+  disabled = false 
+}: ChatInputProps) {
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -34,15 +42,24 @@ export default function ChatInput({ onSend, disabled = false }: ChatInputProps) 
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // 如果正在加载，ESC 键取消
+    if (isLoading && e.key === "Escape") {
+      e.preventDefault();
+      onCancel?.();
+      return;
+    }
+
     // Cmd/Ctrl + Enter 发送
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
-      handleSend();
+      if (!isLoading) {
+        handleSend();
+      }
       return;
     }
 
     // Enter 发送（Shift+Enter 换行）
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey && !isLoading) {
       e.preventDefault();
       handleSend();
       return;
@@ -55,22 +72,32 @@ export default function ChatInput({ onSend, disabled = false }: ChatInputProps) 
         <textarea
           ref={textareaRef}
           className="textarea textarea-ghost flex-1 resize-none border-0 focus:outline-none text-base"
-          placeholder="输入消息..."
+          placeholder={isLoading ? "AI 正在回复..." : "输入消息..."}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          disabled={disabled}
+          disabled={disabled || isLoading}
           rows={1}
           style={{ maxHeight: "200px", overflowY: "auto" }}
         />
-        <button
-          className="btn btn-primary btn-sm"
-          onClick={handleSend}
-          disabled={disabled || !input.trim()}
-          title="发送 (Enter)"
-        >
-          <FiSend className="h-4 w-4" />
-        </button>
+        {isLoading ? (
+          <button
+            className="btn btn-error btn-sm"
+            onClick={onCancel}
+            title="取消 (ESC)"
+          >
+            <HiStop className="h-4 w-4" />
+          </button>
+        ) : (
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={handleSend}
+            disabled={disabled || !input.trim()}
+            title="发送 (Enter)"
+          >
+            <FiSend className="h-4 w-4" />
+          </button>
+        )}
       </div>
     </div>
   );

@@ -180,12 +180,6 @@ export default function AIMessage({ message }: AIMessageProps) {
           </div>
         )}
         
-        {/* 调试：如果没有步骤但应该显示，输出警告 */}
-        {process.env.NODE_ENV === "development" && !message.isLoading && !message.error && (
-          <div className="text-xs text-warning/60">
-            {message.reactSteps?.length === 0 && "⚠️ 没有 ReAct 步骤"}
-          </div>
-        )}
 
         {/* 工具调用展示（兼容旧格式） */}
         {message.toolCalls && message.toolCalls.length > 0 && (

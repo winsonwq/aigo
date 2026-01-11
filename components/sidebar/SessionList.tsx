@@ -4,7 +4,8 @@
 // 显示所有会话，支持新建、切换、重命名、删除
 
 import { useState, useEffect, useCallback } from "react";
-import { HiChatBubbleLeftRight, HiPlus, HiPencil, HiTrash } from "react-icons/hi2";
+import { useRouter, usePathname } from "next/navigation";
+import { HiChatBubbleLeftRight, HiPencil, HiTrash } from "react-icons/hi2";
 import type { Session } from "@/lib/session/types";
 import {
   getAllSessions,
@@ -22,6 +23,8 @@ interface SessionListProps {
 }
 
 export default function SessionList({ collapsed = false, onSessionChange }: SessionListProps) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [currentSessionId, setCurrentSessionIdState] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -76,8 +79,12 @@ export default function SessionList({ collapsed = false, onSessionChange }: Sess
       setCurrentSessionId(sessionId);
       setCurrentSessionIdState(sessionId);
       onSessionChange?.(sessionId);
+      // 如果当前不在 chat 页面，导航到 chat 页面
+      if (pathname !== "/chat" && !pathname.startsWith("/chat/")) {
+        router.push("/chat");
+      }
     },
-    [onSessionChange]
+    [onSessionChange, pathname, router]
   );
 
   // 开始编辑标题
@@ -145,21 +152,8 @@ export default function SessionList({ collapsed = false, onSessionChange }: Sess
 
   return (
     <div className="flex h-full flex-col">
-      {/* 新建会话按钮 */}
-      {!collapsed && (
-        <div className="border-b border-base-300 p-2">
-          <button
-            onClick={handleCreateSession}
-            className="btn btn-primary btn-sm w-full gap-2"
-          >
-            <HiPlus className="h-4 w-4" />
-            <span>新建对话</span>
-          </button>
-        </div>
-      )}
-
       {/* 会话列表 */}
-      <div className="flex-1 overflow-y-auto p-2">
+      <div className="flex-1 overflow-y-auto px-2 pb-2">
         {sessions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-center text-sm text-base-content/60">
             <HiChatBubbleLeftRight className="mb-2 h-8 w-8" />

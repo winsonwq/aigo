@@ -21,6 +21,8 @@ export default function ChatContainer() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
 
   // 加载当前 Session 的消息
   const loadSessionMessages = useCallback(async (sessionId: string | null) => {
@@ -124,11 +126,55 @@ export default function ChatContainer() {
     scrollToBottom();
   }, [messages]);
 
+  // 取消当前请求
+  const handleCancel = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    if (readerRef.current) {
+      readerRef.current.cancel().catch(() => {
+        // 忽略取消错误
+      });
+      readerRef.current = null;
+    }
+    
+    // 更新 AI 消息状态为已取消
+    setMessages((prev) => {
+      const updated = prev.map((msg) => {
+        if (msg.isLoading) {
+          return {
+            ...msg,
+            isLoading: false,
+            content: msg.content || "[已取消]",
+          };
+        }
+        return msg;
+      });
+      
+      // 保存到 Session
+      saveMessagesToSession(currentSessionId, updated);
+      
+      return updated;
+    });
+    
+    setIsLoading(false);
+    abortControllerRef.current = null;
+  }, [currentSessionId, saveMessagesToSession]);
+
   // 发送消息
   const handleSendMessage = async (content: string) => {
     if (!content.trim() || isLoading) {
       return;
     }
+
+    // 如果已有进行中的请求，先取消
+    if (abortControllerRef.current) {
+      handleCancel();
+    }
+
+    // 创建新的 AbortController
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     // 添加用户消息
     const userMessage: ChatMessage = {
@@ -181,6 +227,7 @@ export default function ChatContainer() {
           history: historyMessages,
           stream: true,
         }),
+        signal: abortController.signal,
       });
 
       if (!response.ok) {
@@ -199,11 +246,32 @@ export default function ChatContainer() {
           throw new Error("Failed to get response reader");
         }
 
+        // 保存 reader 引用以便取消
+        readerRef.current = reader;
+
         let buffer = "";
         let accumulatedContent = "";
 
         while (true) {
+          // 检查是否已取消
+          if (abortController.signal.aborted) {
+            reader.cancel().catch(() => {
+              // 忽略取消错误
+            });
+            readerRef.current = null;
+            break;
+          }
+
           const { done, value } = await reader.read();
+          
+          // 再次检查是否已取消（在 read 之后）
+          if (abortController.signal.aborted) {
+            reader.cancel().catch(() => {
+              // 忽略取消错误
+            });
+            readerRef.current = null;
+            break;
+          }
           
           if (done) {
             break;
@@ -214,11 +282,17 @@ export default function ChatContainer() {
           buffer = lines.pop() || "";
 
           for (const line of lines) {
+            // 在处理每行数据前检查是否已取消
+            if (abortController.signal.aborted) {
+              break;
+            }
+
             if (line.startsWith("data: ")) {
               const data = line.slice(6);
               
               if (data === "[DONE]") {
                 // 流结束
+                readerRef.current = null;
                 setMessages((prev) => {
                   const updated = prev.map((msg) =>
                     msg.id === aiMessageId
@@ -308,6 +382,7 @@ export default function ChatContainer() {
         }
 
         // 流结束，标记为完成
+        readerRef.current = null;
         setMessages((prev) => {
           const updated = prev.map((msg) => {
             if (msg.id === aiMessageId) {
@@ -347,6 +422,12 @@ export default function ChatContainer() {
         });
       }
     } catch (err) {
+      // 如果是取消操作，不显示错误
+      if (err instanceof Error && err.name === "AbortError") {
+        // 取消操作已在 handleCancel 中处理
+        return;
+      }
+      
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       setError(errorMessage);
       
@@ -370,6 +451,8 @@ export default function ChatContainer() {
       });
     } finally {
       setIsLoading(false);
+      abortControllerRef.current = null;
+      readerRef.current = null;
     }
   };
 
@@ -401,7 +484,12 @@ export default function ChatContainer() {
       <div className="border-t border-base-300 bg-base-100">
         <div className="flex justify-center w-full">
           <div className="w-full max-w-[60%]">
-            <ChatInput onSend={handleSendMessage} disabled={isLoading} />
+            <ChatInput 
+              onSend={handleSendMessage} 
+              onCancel={handleCancel}
+              isLoading={isLoading}
+              disabled={false}
+            />
           </div>
         </div>
       </div>

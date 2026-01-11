@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import Link from "next/link";
-import { HiArrowLeft, HiPencil, HiArrowPath } from "react-icons/hi2";
+import { HiPencil, HiArrowPath } from "react-icons/hi2";
 import MCPServerList from "@/components/settings/MCPServerList";
 import MCPConfigEditor from "@/components/settings/MCPConfigEditor";
 
@@ -33,18 +32,9 @@ export default function MCPSettingsPage() {
     <div className="flex h-full flex-col">
       <div className="border-b border-base-300 p-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link
-              href="/settings"
-              className="btn btn-ghost btn-sm btn-circle"
-              title="返回设置"
-            >
-              <HiArrowLeft className="h-5 w-5" />
-            </Link>
-            <div>
-              <h1 className="text-2xl font-bold">MCP 配置</h1>
-              <p className="text-sm text-base-content/70">配置和管理 MCP Server，集成外部工具</p>
-            </div>
+          <div>
+            <h1 className="text-2xl font-bold">MCP 配置</h1>
+            <p className="text-sm text-base-content/70">配置和管理 MCP Server，集成外部工具</p>
           </div>
           <div className="flex items-center gap-2">
             <button
