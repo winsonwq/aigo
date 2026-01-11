@@ -46,24 +46,24 @@
 
 ### Phase 3: 对话 UI 💬
 
-- [ ] 创建 `components/chat/ChatContainer.tsx`（对话容器）
-- [ ] 创建 `components/chat/MessageList.tsx`（消息列表）
-- [ ] 创建 `components/chat/MessageItem.tsx`（单条消息）
-- [ ] 创建 `components/chat/UserMessage.tsx`（用户消息组件）
-- [ ] 创建 `components/chat/AIMessage.tsx`（AI 消息组件）
-- [ ] 实现消息气泡样式（用户靠右，AI 靠左）
-- [ ] 创建 `components/chat/ChatInput.tsx`（输入框组件）
-- [ ] 实现多行输入支持
-- [ ] 实现发送按钮和快捷键（Enter/Cmd+Enter）
-- [ ] 实现流式输出显示（实时更新 AI 回复）
-- [ ] 创建 `components/chat/ToolCall.tsx`（工具调用可视化组件）
-- [ ] 实现工具调用过程展示（可折叠）
-- [ ] 显示 Thought、Tool Call、Observation
-- [ ] 实现消息操作（复制按钮）
-- [ ] 实现加载状态显示
-- [ ] 实现错误提示显示
-- [ ] 完善 `/app/agents/page.tsx`（集成所有组件）
-- [ ] 测试对话 UI（连接 Agent API）
+- [x] 创建 `components/chat/ChatContainer.tsx`（对话容器）
+- [x] 创建 `components/chat/MessageList.tsx`（消息列表）
+- [x] 创建 `components/chat/MessageItem.tsx`（单条消息）
+- [x] 创建 `components/chat/UserMessage.tsx`（用户消息组件）
+- [x] 创建 `components/chat/AIMessage.tsx`（AI 消息组件）
+- [x] 实现消息气泡样式（用户靠右，AI 靠左）
+- [x] 创建 `components/chat/ChatInput.tsx`（输入框组件）
+- [x] 实现多行输入支持
+- [x] 实现发送按钮和快捷键（Enter/Cmd+Enter）
+- [x] 实现流式输出显示（实时更新 AI 回复）
+- [x] 创建 `components/chat/ToolCall.tsx`（工具调用可视化组件）
+- [x] 实现工具调用过程展示（可折叠）
+- [x] 显示 Thought、Tool Call、Observation
+- [x] 实现消息操作（复制按钮）
+- [x] 实现加载状态显示
+- [x] 实现错误提示显示
+- [x] 完善 `/app/agents/page.tsx`（集成所有组件）
+- [x] 测试对话 UI（连接 Agent API）
 
 ---
 

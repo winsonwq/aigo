@@ -6,7 +6,7 @@ import { z } from "zod";
 // 简单的计算工具（用于测试）
 export const calculatorTool = new DynamicStructuredTool({
   name: "calculator",
-  description: "Performs basic arithmetic operations. Use this tool to calculate numbers.",
+  description: "MUST use this tool for ALL calculations, even simple ones like 20-5. Do not calculate in your head. Every arithmetic operation must use this tool.",
   schema: z.object({
     operation: z.enum(["add", "subtract", "multiply", "divide"]).describe("The operation to perform"),
     a: z.number().describe("The first number"),

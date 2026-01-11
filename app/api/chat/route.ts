@@ -8,6 +8,7 @@ import { HumanMessage, BaseMessage } from "@langchain/core/messages";
 import { toolRegistry } from "@/lib/tools/registry";
 import { calculatorTool } from "@/lib/tools/test-tool";
 import type { MessagesAnnotation } from "@langchain/langgraph";
+import { ReActStreamHandler } from "@/lib/agent/stream-handler";
 
 // 注册测试工具（只在首次导入时注册一次）
 if (toolRegistry.getAllTools().length === 0) {
@@ -38,7 +39,8 @@ export const POST = tryCatch(async function (request: NextRequest) {
     throw ApiError.badRequest("Message is required and must be a string", "MISSING_MESSAGE");
   }
 
-  // 创建 Agent
+  // 创建 ReAct Agent（使用 LangGraph 实现的 ReAct workflow）
+  // ReAct 模式：Thought -> Tool Call -> Observation -> Thought (循环)
   const agent = createAgent(10);
 
   // 创建初始状态（只包含 messages，其他字段使用默认值）
@@ -75,62 +77,30 @@ export const POST = tryCatch(async function (request: NextRequest) {
 
 /**
  * 流式响应函数
- * 注意：流式响应内部的错误处理需要在 ReadableStream 的回调中完成
+ * 使用 ReActStreamHandler 处理 LangGraph 流式事件
  */
 async function streamResponse(
   agent: ReturnType<typeof createAgent>,
   initialState: { messages: BaseMessage[] }
 ): Promise<Response> {
-  const stream = new ReadableStream({
-    async start(controller) {
-      const encoder = new TextEncoder();
+  const streamHandler = new ReActStreamHandler();
 
-      try {
-        // 执行 Agent（流式）
-        const streamEvents = await agent.streamEvents(initialState, {
-          version: "v2",
-        });
+  try {
+    // 创建 ReadableStream
+    const stream = streamHandler.createReadableStream(agent, initialState);
 
-        for await (const event of streamEvents) {
-          // 发送事件到客户端
-          const data = JSON.stringify(event);
-          controller.enqueue(encoder.encode(`data: ${data}\n\n`));
-        }
-
-        // 获取最终状态
-        const finalState = (await agent.invoke(initialState)) as typeof MessagesAnnotation.State;
-        const lastMessage = finalState.messages[finalState.messages.length - 1];
-
-        if (lastMessage && "content" in lastMessage) {
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({ type: "content", content: lastMessage.content })}\n\n`
-            )
-          );
-        }
-
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-        controller.close();
-      } catch (error) {
-        // 流式响应中的错误通过 SSE 发送给客户端
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        const errorCode = error instanceof ApiError ? error.code : "STREAM_ERROR";
-        
-        controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify({ type: "error", error: errorMessage, code: errorCode })}\n\n`
-          )
-        );
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    },
-  });
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+      },
+    });
+  } catch (error) {
+    // 流式响应创建失败，返回错误响应
+    const errorMessage = error instanceof Error ? error.message : "Stream creation failed";
+    throw ApiError.internal(`Failed to create stream: ${errorMessage}`, "STREAM_ERROR", {
+      originalError: errorMessage,
+    });
+  }
 }

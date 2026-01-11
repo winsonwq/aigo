@@ -11,8 +11,8 @@ export default function Sidebar() {
 
   const menuItems = [
     {
-      name: "Agents",
-      href: "/agents",
+      name: "Chat",
+      href: "/chat",
       icon: HiChatBubbleLeftRight,
     },
     {
