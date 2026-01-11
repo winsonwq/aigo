@@ -139,6 +139,17 @@
    - 命名规范、文件组织、导入顺序、类型定义、测试规范等
    - 详细内容请查看 [代码风格指南](./docs/development/code-styleguide.md)
 
+### Git 提交规范
+
+**提交信息格式**：
+- 使用英文提交信息
+- 只写简洁的 message，不需要详细描述
+- 格式：`<动词> <对象>: <简要描述>`
+- 示例：
+  - `Improve chat UI: remove sticky, add memory, update styles`
+  - `Fix markdown rendering: unify styles and fix spacing`
+  - `Add multi-turn conversation memory support`
+
 ---
 
 ### 测试要求
