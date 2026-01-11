@@ -89,18 +89,16 @@
 ### Phase 5: 配置功能（MCP + Skills + Models）⚙️
 
 #### MCP 配置
-- [ ] 创建 `lib/mcp/types.ts`（MCP Server 类型定义）
-- [ ] 创建 `lib/mcp/storage.ts`（MCP 配置存储）
-- [ ] 创建 `app/settings/mcp/page.tsx`（MCP 设置页面）
-- [ ] 创建 `components/settings/MCPServerList.tsx`（MCP Server 列表）
-- [ ] 创建 `components/settings/MCPServerForm.tsx`（添加/编辑表单）
-- [ ] 实现 MCP Server 列表展示
-- [ ] 实现添加 MCP Server 功能
-- [ ] 实现编辑 MCP Server 功能
-- [ ] 实现删除 MCP Server 功能
+- [x] 创建 `lib/mcp/types.ts`（MCP Server 类型定义）
+- [x] 创建 `lib/mcp/storage.ts`（MCP 配置存储）
+- [x] 创建 `app/settings/mcp/page.tsx`（MCP 设置页面）
+- [x] 创建 `components/settings/MCPServerList.tsx`（MCP Server 列表）
+- [x] 创建 `components/settings/MCPConfigEditor.tsx`（JSON 配置编辑器）
+- [x] 实现 MCP Server 列表展示
+- [x] 实现 JSON 配置编辑功能（统一配置编辑器）
 - [ ] 实现 MCP Server 连接测试
 - [ ] 实现可用工具列表展示
-- [ ] 实现 MCP Server 启用/禁用功能
+- [x] 实现 MCP Server 启用/禁用功能
 - [ ] 创建 `lib/mcp/adapter.ts`（MCP 工具适配器）
 - [ ] 使用 @langchain/mcp-adapters 转换 MCP 工具
 - [ ] 将 MCP 工具注册到 Agent 工具注册表
@@ -125,26 +123,26 @@
 - [ ] 测试 Skills 工具调用
 
 #### Models 配置
-- [ ] 创建 `lib/models/types.ts`（模型类型定义）
-- [ ] 创建 `lib/models/storage.ts`（模型配置存储）
-- [ ] 创建 `app/settings/models/page.tsx`（模型设置页面）
-- [ ] 创建 `components/settings/ModelList.tsx`（模型列表）
-- [ ] 创建 `components/settings/ModelForm.tsx`（添加/编辑表单）
-- [ ] 实现模型列表展示
-- [ ] 实现添加模型功能（支持 OpenAI、Anthropic 等）
-- [ ] 实现编辑模型功能（配置参数、API Key）
-- [ ] 实现删除模型功能
-- [ ] 实现默认模型设置
+- [x] 创建 `lib/models/types.ts`（模型类型定义）
+- [x] 创建 `lib/models/storage.ts`（模型配置存储）
+- [x] 创建 `app/settings/models/page.tsx`（模型设置页面）
+- [x] 创建 `components/settings/ModelList.tsx`（模型列表）
+- [x] 创建 `components/settings/ModelForm.tsx`（添加/编辑表单）
+- [x] 实现模型列表展示
+- [x] 实现添加模型功能（支持 OpenAI、Anthropic 等）
+- [x] 实现编辑模型功能（配置参数、API Key）
+- [x] 实现删除模型功能
+- [x] 实现默认模型设置
 - [ ] 创建 `components/chat/ModelSelector.tsx`（模型选择器）
 - [ ] 在对话界面添加模型切换功能
 - [ ] 更新 LLM 客户端以支持多模型切换
 - [ ] 测试模型切换功能
 
 #### 设置页面导航
-- [ ] 在 Sidebar 中实现设置二级菜单展开（方案 A）
-- [ ] 或实现设置主页面卡片导航（方案 B）
-- [ ] 创建 `/app/settings/general/page.tsx`（基础设置页面占位）
-- [ ] 测试所有设置页面路由
+- [x] 在 Sidebar 中实现设置二级菜单展开（方案 A）
+- [x] 或实现设置主页面卡片导航（方案 B）
+- [x] 创建 `/app/settings/general/page.tsx`（基础设置页面占位）
+- [x] 测试所有设置页面路由
 
 ---
 
