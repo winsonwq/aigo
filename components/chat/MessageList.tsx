@@ -23,24 +23,18 @@ export default function MessageList({ messages }: MessageListProps) {
     );
   }
 
-  // 找到最后一个用户消息的索引
-  let lastUserMessageIndex = -1;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role === "user") {
-      lastUserMessageIndex = i;
-      break;
-    }
-  }
-
   return (
-    <div className="flex flex-col gap-4 p-4">
-      {messages.map((message, index) => (
-        <MessageItem 
-          key={message.id} 
-          message={message} 
-          isLastUserMessage={message.role === "user" && index === lastUserMessageIndex}
-        />
-      ))}
+    <div className="flex justify-center w-full">
+      <div className="w-full max-w-[60%]">
+        <div className="flex flex-col gap-4 p-4">
+          {messages.map((message) => (
+            <MessageItem 
+              key={message.id} 
+              message={message}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

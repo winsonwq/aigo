@@ -54,7 +54,7 @@ export default function ChatInput({ onSend, disabled = false }: ChatInputProps) 
       <div className="flex items-end gap-2 rounded-lg border border-base-300 bg-base-100 p-2">
         <textarea
           ref={textareaRef}
-          className="textarea textarea-ghost flex-1 resize-none border-0 focus:outline-none"
+          className="textarea textarea-ghost flex-1 resize-none border-0 focus:outline-none text-base"
           placeholder="输入消息..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -71,13 +71,6 @@ export default function ChatInput({ onSend, disabled = false }: ChatInputProps) 
         >
           <FiSend className="h-4 w-4" />
         </button>
-      </div>
-      <div className="mt-2 text-xs text-base-content/40">
-        <span>Enter 发送</span>
-        <span className="mx-2">·</span>
-        <span>Shift+Enter 换行</span>
-        <span className="mx-2">·</span>
-        <span>Cmd/Ctrl+Enter 发送</span>
       </div>
     </div>
   );

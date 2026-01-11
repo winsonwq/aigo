@@ -4,7 +4,7 @@
 // 简单显示思考、工具调用、观察等步骤
 
 import React, { useState } from "react";
-import { FiChevronDown, FiChevronRight } from "react-icons/fi";
+import { FiChevronDown, FiChevronRight, FiZap, FiTool, FiEye } from "react-icons/fi";
 import ReactMarkdown, { type Components } from "react-markdown";
 import type { ReActStep } from "./types";
 
@@ -28,7 +28,7 @@ const markdownComponents: Partial<Components> = {
       </code>
     );
   },
-  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+  p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
   ul: ({ children }) => <ul className="list-disc list-inside mb-2">{children}</ul>,
   ol: ({ children }) => <ol className="list-decimal list-inside mb-2">{children}</ol>,
   li: ({ children }) => <li className="mb-1">{children}</li>,
@@ -45,6 +45,9 @@ const markdownComponents: Partial<Components> = {
       {children}
     </a>
   ),
+  hr: () => (
+    <hr className="border-0 border-t border-base-content/20 my-6" />
+  ),
 };
 
 // 渲染 Markdown 内容的辅助函数
@@ -54,7 +57,7 @@ function renderMarkdownContent(content: string, showMarkdown: boolean): React.Re
   }
   
   return (
-    <div className="prose prose-sm max-w-none break-words">
+    <div className="prose max-w-none break-words">
       <ReactMarkdown components={markdownComponents}>
         {content}
       </ReactMarkdown>
@@ -77,6 +80,19 @@ export default function ReActStepComponent({ step, defaultExpanded = false, show
         return "最终回答";
       default:
         return "步骤";
+    }
+  };
+
+  const getStepIcon = () => {
+    switch (step.type) {
+      case "thought":
+        return <FiZap className="h-3 w-3" />;
+      case "tool_call":
+        return <FiTool className="h-3 w-3" />;
+      case "observation":
+        return <FiEye className="h-3 w-3" />;
+      default:
+        return null;
     }
   };
 
@@ -117,8 +133,9 @@ export default function ReActStepComponent({ step, defaultExpanded = false, show
       {step.type === "observation" ? (
         <div>
           {/* 步骤标签 */}
-          <div className="text-xs font-semibold text-base-content/70 mb-1">
-            {getStepLabel()}
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-base-content/70 mb-1">
+            {getStepIcon()}
+            <span>{getStepLabel()}</span>
             {step.toolCall && step.toolCall.name && (
               <span className="text-base-content/50 ml-1">
                 ({step.toolCall.name})
@@ -128,7 +145,7 @@ export default function ReActStepComponent({ step, defaultExpanded = false, show
           
           {/* 步骤内容 */}
           {step.toolCall && step.toolCall.result !== undefined && (
-            <div className="text-sm text-base-content/90 whitespace-pre-wrap break-words">
+            <div className="text-base-content/90 break-words" style={{ whiteSpace: 'normal' }}>
               {renderMarkdownContent(
                 typeof step.toolCall.result === "string" 
                   ? step.toolCall.result 
@@ -140,7 +157,7 @@ export default function ReActStepComponent({ step, defaultExpanded = false, show
           
           {/* 如果没有 toolCall.result，显示 content */}
           {(!step.toolCall || step.toolCall.result === undefined) && step.content && step.content.trim() && (
-            <div className="text-sm text-base-content/90 whitespace-pre-wrap break-words">
+            <div className="text-base-content/90 break-words" style={{ whiteSpace: 'normal' }}>
               {renderMarkdownContent(
                 step.content.replace(/^工具执行结果:\s*/, ""),
                 showMarkdown
@@ -169,9 +186,12 @@ export default function ReActStepComponent({ step, defaultExpanded = false, show
               ) : (
                 <FiChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-base-content/50" />
               )}
-              <span className="text-xs font-medium text-base-content/80 truncate">
-                {getStepLabel()}
-                {step.toolCall && `: ${step.toolCall.name}`}
+              <span className="flex items-center gap-1.5 text-xs font-medium text-base-content/80 truncate">
+                {getStepIcon()}
+                <span>
+                  {getStepLabel()}
+                  {step.toolCall && `: ${step.toolCall.name}`}
+                </span>
               </span>
             </div>
             {/* 只显示非完成状态（执行中、错误），已完成状态不显示 */}
@@ -243,13 +263,14 @@ export default function ReActStepComponent({ step, defaultExpanded = false, show
         // 普通显示（思考步骤）
         <div>
           {/* 步骤标签 */}
-          <div className="text-xs font-semibold text-base-content/70 mb-1">
-            {getStepLabel()}
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-base-content/70 mb-1">
+            {getStepIcon()}
+            <span>{getStepLabel()}</span>
           </div>
           
           {/* 步骤内容 */}
           {step.content && (
-            <div className="text-sm text-base-content/90 whitespace-pre-wrap break-words">
+            <div className="text-base-content/90 break-words" style={{ whiteSpace: 'normal' }}>
               {renderMarkdownContent(step.content, showMarkdown)}
             </div>
           )}

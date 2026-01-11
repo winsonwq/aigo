@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { tryCatch } from "@/lib/api-handler";
 import { ApiError } from "@/lib/api-error";
 import { createAgent } from "@/lib/agent/graph";
-import { HumanMessage, BaseMessage } from "@langchain/core/messages";
+import { HumanMessage, AIMessage, BaseMessage } from "@langchain/core/messages";
 import { toolRegistry } from "@/lib/tools/registry";
 import { calculatorTool } from "@/lib/tools/test-tool";
 import type { MessagesAnnotation } from "@langchain/langgraph";
@@ -22,6 +22,7 @@ if (toolRegistry.getAllTools().length === 0) {
 export const POST = tryCatch(async function (request: NextRequest) {
   let body: {
     message?: string;
+    history?: Array<{ role: string; content: string }>;
     sessionId?: string;
     stream?: boolean;
   };
@@ -32,7 +33,7 @@ export const POST = tryCatch(async function (request: NextRequest) {
     throw ApiError.badRequest("Invalid JSON in request body", "INVALID_JSON");
   }
 
-  const { message, sessionId, stream: shouldStream } = body;
+  const { message, history, sessionId, stream: shouldStream } = body;
 
   // 验证必需参数
   if (!message || typeof message !== "string") {
@@ -43,9 +44,27 @@ export const POST = tryCatch(async function (request: NextRequest) {
   // ReAct 模式：Thought -> Tool Call -> Observation -> Thought (循环)
   const agent = createAgent(10);
 
-  // 创建初始状态（只包含 messages，其他字段使用默认值）
+  // 构建消息历史
+  const historyMessages: BaseMessage[] = [];
+  
+  // 如果有历史消息，转换为 LangChain 消息格式
+  if (history && Array.isArray(history)) {
+    for (const msg of history) {
+      if (msg.role === "user" && typeof msg.content === "string") {
+        historyMessages.push(new HumanMessage(msg.content));
+      } else if (msg.role === "assistant" && typeof msg.content === "string") {
+        // 使用 AIMessage 表示 assistant 的消息
+        historyMessages.push(new AIMessage(msg.content));
+      }
+    }
+  }
+
+  // 添加当前用户消息
+  historyMessages.push(new HumanMessage(message));
+
+  // 创建初始状态（包含历史消息和当前消息）
   const initialState = {
-    messages: [new HumanMessage(message)],
+    messages: historyMessages,
   };
 
   // 如果请求流式输出，直接返回流式响应（流式响应内部有自己的错误处理）

@@ -9,12 +9,11 @@ import type { ChatMessage } from "./types";
 
 interface MessageItemProps {
   message: ChatMessage;
-  isLastUserMessage?: boolean;
 }
 
-export default function MessageItem({ message, isLastUserMessage = false }: MessageItemProps) {
+export default function MessageItem({ message }: MessageItemProps) {
   if (message.role === "user") {
-    return <UserMessage message={message} isLastUserMessage={isLastUserMessage} />;
+    return <UserMessage message={message} />;
   }
 
   if (message.role === "assistant") {

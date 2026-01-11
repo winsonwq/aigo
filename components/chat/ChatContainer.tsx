@@ -55,6 +55,14 @@ export default function ChatContainer() {
     setMessages((prev) => [...prev, aiMessage]);
 
     try {
+      // 准备历史消息（转换为 API 格式）
+      const historyMessages = messages
+        .filter((msg) => msg.role === "user" || msg.role === "assistant")
+        .map((msg) => ({
+          role: msg.role,
+          content: msg.content,
+        }));
+
       // 调用 API（流式输出）
       const response = await fetch("/api/chat", {
         method: "POST",
@@ -63,6 +71,7 @@ export default function ChatContainer() {
         },
         body: JSON.stringify({
           message: content.trim(),
+          history: historyMessages,
           stream: true,
         }),
       });
@@ -123,14 +132,14 @@ export default function ChatContainer() {
                 if (parsed.type === "content" && parsed.content) {
                   accumulatedContent += parsed.content;
                   
-                  // 使用函数式更新确保获取最新状态
+                  // 使用函数式更新确保获取最新状态，并保持 isLoading 状态
                   setMessages((prev) => {
                     return prev.map((msg) => {
                       if (msg.id === aiMessageId) {
                         return {
                           ...msg,
                           content: accumulatedContent,
-                          isLoading: true,
+                          isLoading: true, // 保持加载状态，直到收到 [DONE]
                         };
                       }
                       return msg;
@@ -258,7 +267,11 @@ export default function ChatContainer() {
 
       {/* 输入区域 */}
       <div className="border-t border-base-300 bg-base-100">
-        <ChatInput onSend={handleSendMessage} disabled={isLoading} />
+        <div className="flex justify-center w-full">
+          <div className="w-full max-w-[60%]">
+            <ChatInput onSend={handleSendMessage} disabled={isLoading} />
+          </div>
+        </div>
       </div>
     </div>
   );

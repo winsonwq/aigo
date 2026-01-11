@@ -1,7 +1,7 @@
 "use client";
 
 // 用户消息组件
-// 显示在左侧，使用 sticky 样式固定在顶部
+// 显示在左侧，带边框和圆角
 
 import { useState } from "react";
 import { FiCopy } from "react-icons/fi";
@@ -9,10 +9,10 @@ import type { ChatMessage } from "./types";
 
 interface UserMessageProps {
   message: ChatMessage;
-  isLastUserMessage?: boolean;
+  userMessageIndex?: number;
 }
 
-export default function UserMessage({ message, isLastUserMessage = false }: UserMessageProps) {
+export default function UserMessage({ message }: UserMessageProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -26,11 +26,11 @@ export default function UserMessage({ message, isLastUserMessage = false }: User
   };
 
   return (
-    <div className={`flex justify-start ${isLastUserMessage ? "sticky top-0 z-10 bg-base-100/95 backdrop-blur-sm border-b border-base-300 pb-2 mb-2" : ""}`}>
-      <div className="flex max-w-[80%] flex-col items-start gap-2">
+    <div className="flex justify-start w-full">
+      <div className="flex w-full max-w-[80%] flex-col items-start gap-2 border border-base-300 rounded-lg px-4 py-2">
         {/* 消息内容 */}
-        <div className="px-2 py-1">
-          <p className="whitespace-pre-wrap break-words text-base-content">{message.content}</p>
+        <div>
+          <p className="break-words text-base-content" style={{ whiteSpace: 'normal' }}>{message.content}</p>
         </div>
 
         {/* 操作按钮 */}
