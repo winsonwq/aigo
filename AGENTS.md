@@ -68,6 +68,24 @@
 
 ### 最近更新
 
+- **2024-12-XX**: 修正 Skills 实现 - 基于 Anthropic Agent Skills 标准 ✅
+  - 更新 `docs/features/skills-config.md`，描述 Anthropic Agent Skills 标准
+  - 创建 `lib/skills/types.ts`，定义符合标准的类型
+  - 创建 `lib/skills/storage.ts`，实现 Skills 配置存储
+  - 创建 `lib/skills/parser.ts`，解析 SKILL.md 文件（YAML frontmatter + Markdown）
+  - 创建 `lib/skills/loader.ts`，实现渐进式披露加载机制
+  - 创建 API 路由：
+    - `/api/skills/load` - 加载技能元数据（启动时）
+    - `/api/skills/activate` - 激活技能（加载完整指令）
+    - `/api/skills/resource` - 加载技能资源（按需）
+  - 创建设置页面和组件：
+    - `app/settings/skills/page.tsx` - Skills 设置页面
+    - `components/settings/SkillsList.tsx` - Skills 列表组件
+    - `components/settings/SkillForm.tsx` - Skills 表单组件
+  - 更新 `docs/development/plan.md`，修正 Skills 实现方式
+  - **说明**: Skills 不是工具函数，而是文档化的指令集，采用渐进式披露机制（元数据 -> 指令 -> 资源）
+  - **测试**: 构建成功，无类型错误 ✅
+
 - **2024-12-XX**: Phase 4 完成 - Session 管理功能 ✅
   - 创建 Session 类型定义和存储层（使用 localStorage）
   - 实现 Session CRUD 操作（创建、读取、更新、删除）

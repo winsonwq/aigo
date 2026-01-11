@@ -104,23 +104,23 @@
 - [ ] 将 MCP 工具注册到 Agent 工具注册表
 - [ ] 测试 MCP 工具调用
 
-#### Skills 配置
-- [ ] 创建 `lib/skills/types.ts`（Skills 类型定义）
-- [ ] 创建 `lib/skills/storage.ts`（Skills 配置存储）
+#### Skills 配置（基于 Anthropic Agent Skills 标准）
+- [ ] 创建 `lib/skills/types.ts`（Skills 类型定义，符合 Anthropic 标准）
+- [ ] 创建 `lib/skills/storage.ts`（Skills 配置存储，管理技能目录路径/URL）
+- [ ] 创建 `lib/skills/parser.ts`（解析 SKILL.md 的 YAML frontmatter 和 Markdown）
+- [ ] 创建 `lib/skills/loader.ts`（实现渐进式披露加载机制）
 - [ ] 创建 `app/settings/skills/page.tsx`（Skills 设置页面）
 - [ ] 创建 `components/settings/SkillsList.tsx`（Skills 列表）
-- [ ] 创建 `components/settings/SkillForm.tsx`（添加/编辑表单）
-- [ ] 设计 Skills 接口规范（函数签名、参数等）
-- [ ] 实现 Skills 列表展示
-- [ ] 实现添加 Skills 功能
-- [ ] 实现编辑 Skills 功能
+- [ ] 创建 `components/settings/SkillForm.tsx`（添加/编辑表单，支持本地路径和远程 URL）
+- [ ] 实现 Skills 列表展示（显示 name、description、状态）
+- [ ] 实现添加 Skills 功能（本地目录或远程 URL）
+- [ ] 实现编辑 Skills 功能（修改路径/URL、启用/禁用）
 - [ ] 实现删除 Skills 功能
 - [ ] 实现 Skills 启用/禁用功能
-- [ ] 实现 Skills 权限配置（可选）
-- [ ] 创建 `lib/skills/loader.ts`（Skills 加载器）
-- [ ] 将 Skills 转换为 LangChain 工具
-- [ ] 将 Skills 注册到 Agent 工具注册表
-- [ ] 测试 Skills 工具调用
+- [ ] 实现技能验证（检查 SKILL.md 是否存在且格式正确）
+- [ ] 在 Agent Graph 中集成 Skills（启动时加载元数据，激活时加载指令）
+- [ ] 实现技能资源按需加载（scripts、references、assets）
+- [ ] 测试 Skills 加载和激活
 
 #### Models 配置
 - [x] 创建 `lib/models/types.ts`（模型类型定义）
