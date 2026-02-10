@@ -1,0 +1,20 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
+.idea/
+.vscode/
+.cursor/
+*.swp
+*.swo
+
+# Env / secrets
+.env
+.env.local
+*.local
+
+# Build / output
+dist/
+build/
+*.log
