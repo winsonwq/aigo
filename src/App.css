@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/* 整页 100vh 不滚动，仅内容区可滚动 */
+html,
+body,
+#root {
+  height: 100vh;
+  overflow: hidden;
+}
+
 .logo.vite:hover {
   filter: drop-shadow(0 0 2em #747bff);
 }

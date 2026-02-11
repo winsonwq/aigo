@@ -8,11 +8,11 @@
 
 OpenWork 通过 **opencode-bridge** 与 OpenCode 运行时通信，采用三种方式（可选择性借鉴）：
 
-| 方式 | 用途 | 说明 |
-|------|------|------|
-| **HTTP API + SDK** | 会话 CRUD、发消息、健康检查 | 使用 `@opencode-ai/sdk` 的 `createOpencodeClient({ baseUrl })`，调用服务端 REST API。 |
-| **SQLite 直读** | 会话列表、消息历史、元数据 | 直接读取 OpenCode 的数据库 `~/.opencode/opencode.db`（或项目内 `.opencode/opencode.db`），表包括 `sessions`、`messages`（含 `parts` JSON）。适合做列表、搜索、离线展示。 |
-| **MCP Bridge** | 实时权限弹窗、流式进度、自定义工具 | OpenWork 作为 MCP 服务被 OpenCode 连接；用于权限确认、流式推送、暴露原生能力（如文件选择器）。 |
+| 方式               | 用途                               | 说明                                                                                                                                                                     |
+| ------------------ | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **HTTP API + SDK** | 会话 CRUD、发消息、健康检查        | 使用 `@opencode-ai/sdk` 的 `createOpencodeClient({ baseUrl })`，调用服务端 REST API。                                                                                    |
+| **SQLite 直读**    | 会话列表、消息历史、元数据         | 直接读取 OpenCode 的数据库 `~/.opencode/opencode.db`（或项目内 `.opencode/opencode.db`），表包括 `sessions`、`messages`（含 `parts` JSON）。适合做列表、搜索、离线展示。 |
+| **MCP Bridge**     | 实时权限弹窗、流式进度、自定义工具 | OpenWork 作为 MCP 服务被 OpenCode 连接；用于权限确认、流式推送、暴露原生能力（如文件选择器）。                                                                           |
 
 - **ready2work 建议**：优先用 **SDK + HTTP API** 实现会话/消息与事件流；若需要与 OpenWork 一致的列表性能或离线能力，再考虑 **SQLite 直读**；若需要权限确认、自定义工具再考虑 **MCP Bridge**。
 

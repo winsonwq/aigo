@@ -10,17 +10,17 @@ import "./App.css";
 function App() {
   return (
     <OpenCodeProvider>
-    <HashRouter>
-      <Routes>
-        <Route element={<Layout />}>
-          <Route index element={<Home />} />
-          <Route path="session/:id" element={<Session />} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="skills" element={<Skills />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
-      </Routes>
-    </HashRouter>
+      <HashRouter>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route index element={<Home />} />
+            <Route path="session/:id" element={<Session />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="skills" element={<Skills />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </HashRouter>
     </OpenCodeProvider>
   );
 }

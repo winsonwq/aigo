@@ -7,7 +7,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import {
+  createOpencodeClient,
+  type OpencodeClient,
+} from "@opencode-ai/sdk/v2/client";
 import { invoke } from "@tauri-apps/api/core";
 
 const OPENCODE_PORT = 4096;
@@ -31,7 +34,7 @@ type HealthResult = { ok: true } | { ok: false; error: string };
 
 async function checkHealth(client: OpencodeClient): Promise<HealthResult> {
   try {
-    const res = await client.global.health() as {
+    const res = (await client.global.health()) as {
       data?: unknown;
       response?: { ok?: boolean };
       error?: unknown;
@@ -39,7 +42,8 @@ async function checkHealth(client: OpencodeClient): Promise<HealthResult> {
     const data = res?.data as Record<string, unknown> | undefined;
     // 兼容多种返回格式：{ healthy: true }、{ 200: { healthy: true } }、或任意 2xx 且有 body
     if (data && typeof data === "object") {
-      if (data.healthy === true || (data.healthy as string) === "true") return { ok: true };
+      if (data.healthy === true || (data.healthy as string) === "true")
+        return { ok: true };
       const inner = data[200] as Record<string, unknown> | undefined;
       if (inner?.healthy === true) return { ok: true };
       if (res?.response?.ok === true) return { ok: true };
@@ -66,59 +70,62 @@ export function OpenCodeProvider({ children }: { children: ReactNode }) {
     setStatus("connecting");
     setErrorMessage(null);
 
-    const corsHint =
-      " 解决 CORS：opencode serve --hostname 127.0.0.1 --port " +
-      OPENCODE_PORT +
-      " --cors http://localhost:1420 --cors tauri://localhost";
-
-    const tryConnect = async (): Promise<{ client: OpencodeClient } | { error: string }> => {
+    // 一套流程：由 ready2work 负责启动 OpenCode 并连接，用户无需本机单独安装/启动。
+    // 当前从 PATH 启动 opencode；后续版本将改为内置/下载的二进制。
+    const tryConnect = async (): Promise<
+      { client: OpencodeClient } | { error: string }
+    > => {
       const newClient = createOpencodeClient({ baseUrl: BASE_URL });
       const health = await checkHealth(newClient);
       if (health.ok) return { client: newClient };
       const err = health.error;
       const isCors =
         typeof err === "string" &&
-        (err.includes("Failed to fetch") || err.includes("NetworkError") || err.includes("CORS"));
+        (err.includes("Failed to fetch") ||
+          err.includes("NetworkError") ||
+          err.includes("CORS"));
       return { error: isCors ? "CORS/网络被拦截" : err };
     };
 
     try {
-      // 1. If server is already running, connect directly
-      let result = await tryConnect();
-      if ("client" in result) {
-        setClient(result.client);
-        setStatus("connected");
-        return;
-      }
-      let lastError = result.error;
-      // 2. Otherwise start serve and retry once
       await invoke("start_opencode_serve", { port: OPENCODE_PORT });
-      await new Promise((r) => setTimeout(r, 1200));
-      result = await tryConnect();
+      // 轮询等待服务就绪，最多约 8 秒
+      const maxAttempts = 20;
+      const intervalMs = 400;
+      let result: { client: OpencodeClient } | { error: string } = {
+        error: "等待服务启动",
+      };
+      for (let i = 0; i < maxAttempts; i++) {
+        await new Promise((r) => setTimeout(r, intervalMs));
+        result = await tryConnect();
+        if ("client" in result) break;
+      }
       if ("client" in result) {
         setClient(result.client);
         setStatus("connected");
         return;
       }
-      lastError = result.error;
+      const lastError = result.error;
       setStatus("error");
       setErrorMessage(
         "无法连接 OpenCode（" +
           lastError +
-          "）。请确认：1) opencode serve 已在 " +
-          OPENCODE_PORT +
-          " 端口运行；2) 若在 Tauri 内报 CORS/网络被拦截，" +
-          corsHint
+          "）。当前会从本机 PATH 启动 opencode；若未安装请先安装（如 brew install opencode）。后续版本将内置 OpenCode，无需单独安装。"
       );
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      const hint =
-        typeof msg === "string" && (msg.includes("CORS") || msg.includes("Failed to fetch"))
-          ? " 请用 opencode serve ... --cors http://localhost:1420 --cors tauri://localhost 重启服务。"
-          : "";
       setStatus("error");
-      setErrorMessage((msg || "启动或连接失败") + hint);
+      setErrorMessage(
+        msg ||
+          "启动失败。请先安装 opencode（如 brew install opencode），后续版本将内置无需安装。"
+      );
     }
+  }, []);
+
+  // 应用启动时自动连接，无需用户点击
+  useEffect(() => {
+    void connect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅挂载时执行一次
   }, []);
 
   // Health poll when connected; on failure set error and allow reconnect
@@ -148,7 +155,9 @@ export function OpenCodeProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <OpenCodeContext.Provider value={value}>{children}</OpenCodeContext.Provider>
+    <OpenCodeContext.Provider value={value}>
+      {children}
+    </OpenCodeContext.Provider>
   );
 }
 

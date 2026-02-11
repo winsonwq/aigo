@@ -6,11 +6,13 @@
 
 ```bash
 pnpm install
-pnpm dev          # 仅前端
-pnpm tauri dev    # 桌面应用（需 Rust 环境）
+pnpm dev          # 仅前端（Vite，http://localhost:1420）
+pnpm tauri dev    # 桌面应用（会先执行 pnpm dev，再编译并启动 Rust）
 pnpm run build    # 前端构建
 pnpm tauri build  # 打包桌面应用
 ```
+
+**若 `pnpm tauri dev` 看起来停住**：会先跑 `pnpm dev` 再跑 `cargo run`。Rust **首次编译**可能要 1～2 分钟，期间终端可能几乎没有新输出，属正常。若卡在「Running BeforeDevCommand」之后很久：可先单独开一个终端执行 `pnpm dev`，确认能出现 `Local: http://localhost:1420`；若 Vite 正常，再回到原终端多等一会儿（等 Rust 编译）。若卡在「Running DevCommand」之后：就是在编译 Rust，多等 1～2 分钟即可。
 
 ## 文档
 

@@ -8,14 +8,14 @@
 
 ## 阶段 / 里程碑
 
-| 阶段 | 目标 | 状态 |
-|------|------|------|
-| 1 | Tauri 2.0 + React 客户端骨架 | 完成 |
-| 2 | OpenCode 下载与 builtin 启动、自动连接 | 进行中 |
-| 3 | UI 体系：Shadcn/ui、Layout、Sidebar、Menu、Router、Icons | 完成 |
-| 4 | OpenCode Client SDK 集成：事件监听、消息/工具展示、react-markdown | 待开始 |
-| 5 | Skills 管理：查看当前 skills、通过 zip 安装 | 待开始 |
-| 6 | （可选）Vercel AI SDK 集成评估与落地 | 待开始 |
+| 阶段 | 目标                                                              | 状态   |
+| ---- | ----------------------------------------------------------------- | ------ |
+| 1    | Tauri 2.0 + React 客户端骨架                                      | 完成   |
+| 2    | OpenCode 下载与 builtin 启动、自动连接                            | 进行中 |
+| 3    | UI 体系：Shadcn/ui、Layout、Sidebar、Menu、Router、Icons          | 完成   |
+| 4    | OpenCode Client SDK 集成：事件监听、消息/工具展示、react-markdown | 待开始 |
+| 5    | Skills 管理：查看当前 skills、通过 zip 安装                       | 待开始 |
+| 6    | （可选）Vercel AI SDK 集成评估与落地                              | 待开始 |
 
 ---
 
@@ -69,7 +69,7 @@
 
 OpenCode 事件参考：[插件 (Plugins)](https://www.opencodecn.com/docs/plugins)（如 `session.*`、`message.updated`、`tool.execute.before`/`after`、`server.connected`）。
 
-- [ ] 在连接成功后，使用 **@opencode-ai/sdk** 的 client 订阅/轮询 **会话列表**（若 SDK 或后端提供 list sessions API）；与 Sidebar 的 Sessions 列表状态同步（新建、切换、删除）。
+- [x] 在连接成功后，使用 **@opencode-ai/sdk** 的 client 订阅/轮询 **会话列表**（若 SDK 或后端提供 list sessions API）；与 Sidebar 的 Sessions 列表状态同步（新建、切换、删除）。（已实现：`useSessions` 拉取 `session.list`、每 15s 刷新；Sidebar 与 Home 展示列表；新建会话 `session.create` 并跳转 `/session/:id`；删除待阶段 4 后续做）
 - [ ] **会话详情**：进入 `/session/:id` 时加载该会话的消息列表；区分 **用户消息** 与 **AI 消息**；若 SDK 支持流式，则对接流式更新并实时追加到 UI。
 - [ ] **Markdown 渲染**：安装 **react-markdown**；对 AI 消息内容用 react-markdown 渲染；配置 `remark-gfm`（表格、脚注等）、代码块高亮（如 `rehype-highlight` 或 `react-syntax-highlighter`）；防止 XSS（使用默认安全行为或 sanitize）。
 - [ ] **工具调用展示**：订阅或从消息上下文中拿到 `tool.execute.before`/`after` 等；在消息下方或右侧面板以列表/时间线形式展示「工具名、参数、结果/状态」。
@@ -81,10 +81,11 @@ OpenCode 事件参考：[插件 (Plugins)](https://www.opencodecn.com/docs/plugi
 
 ### 5. Skills 管理：查看当前检索到的 skills、通过 zip 安装
 
-OpenCode 会在多路径下检索 `SKILL.md`：[Agent Skills](https://opencode.ai/docs/skills/)  
-- 项目：`.opencode/skills/<name>/SKILL.md`、`.claude/skills/<name>/SKILL.md`、`.agents/skills/<name>/SKILL.md`  
+OpenCode 会在多路径下检索 `SKILL.md`：[Agent Skills](https://opencode.ai/docs/skills/)
+
+- 项目：`.opencode/skills/<name>/SKILL.md`、`.claude/skills/<name>/SKILL.md`、`.agents/skills/<name>/SKILL.md`
 - 全局：`~/.config/opencode/skills/<name>/SKILL.md`、`~/.claude/skills/`、`~/.agents/skills/`  
-每个 skill 为目录，内含 `SKILL.md`，且需 YAML frontmatter：`name`（必填）、`description`（必填）。OpenWork 有 Skills Manager：列表展示、从包安装、导入本地目录；可参考 [different-ai/openwork](https://github.com/different-ai/openwork)。
+  每个 skill 为目录，内含 `SKILL.md`，且需 YAML frontmatter：`name`（必填）、`description`（必填）。OpenWork 有 Skills Manager：列表展示、从包安装、导入本地目录；可参考 [different-ai/openwork](https://github.com/different-ai/openwork)。
 
 - [ ] **Skills 页面**：在路由中增加 **Skills 管理** 页（如 `/skills`），Sidebar 增加入口（图标 + 「Skills」）。
 - [ ] **「当前检索到的 skills」**：实现「当前会被 OpenCode 检索到的 skills」列表。若 SDK/服务端有 list skills API 则直接调用；否则在前端或通过 Tauri 读取上述目录（优先当前工作区 `.opencode/skills`、`.claude/skills`、`.agents/skills`，以及用户目录 `~/.config/opencode/skills` 等），扫描子目录内是否存在 `SKILL.md`，解析 frontmatter 取 `name`、`description`，去重后展示（可标注来源：项目/全局）。
