@@ -11,7 +11,7 @@
 | 阶段 | 目标 | 状态 |
 |------|------|------|
 | 1 | Tauri 2.0 + React 客户端骨架 | 完成 |
-| 2 | OpenCode 下载与 builtin 启动、自动连接 | 待开始 |
+| 2 | OpenCode 下载与 builtin 启动、自动连接 | 进行中 |
 | 3 | UI 体系：Shadcn/ui、Layout、Sidebar、Menu、Router、Icons | 完成 |
 | 4 | OpenCode Client SDK 集成：事件监听、消息/工具展示、react-markdown | 待开始 |
 | 5 | Skills 管理：查看当前 skills、通过 zip 安装 | 待开始 |
@@ -37,14 +37,18 @@
 
 ### 2. 基于 OpenCode 的类 OpenWork 能力：下载与 builtin 启动、自动连接
 
+**当前优先**：应用**内置维护一个 OpenCode 实例**（下载/侧载 + 自启动），并**自运行、自动连接**；不依赖用户本机已安装的 opencode。  
+**后续扩展**：支持「连接别的 opencode 服务」（远程/他机）时，再一并做认证（如 `OPENCODE_SERVER_PASSWORD`、HTTP Basic Auth 等），不在当前内置实例流程里处理。
+
 参考：OpenWork 执行 `opencode serve --hostname 127.0.0.1 --port <port>`；二进制可放 Tauri sidecar 或应用数据目录。[different-ai/openwork](https://github.com/different-ai/openwork) 的 sidecar/安装见 [Issue #121](https://github.com/different-ai/openwork/issues/121)。
 
 - [ ] **调研**：看 OpenWork 仓库中 `packages/desktop/src-tauri/sidecars`、releases 里是否带 OpenCode 二进制；记录各平台（macOS arm/x64、Windows、Linux）的下载 URL 或打包方式。
 - [ ] **版本与平台**：定义「当前支持的 OpenCode 版本」（如 latest 或固定版本）；实现运行时检测 OS/arch（Tauri 或 JS 侧），决定下载哪一档二进制。
 - [ ] **下载流程**：实现下载可执行文件到应用目录（如 Tauri `app_data_dir` 或 sidecar 目标路径）；带进度与失败重试；可选校验（checksum/签名）。
-- [ ] **Sidecar/Command**：在 Tauri 中配置 OpenCode 为 sidecar，或从应用目录 spawn 子进程；启动命令固定为 `opencode serve --hostname 127.0.0.1 --port <port>`，端口可配置（如 4096），避免与已有进程冲突。
-- [ ] **连接**：前端或 Tauri 层在「应用启动」或「连接」时，用 `@opencode-ai/sdk` 的 `createOpencodeClient({ baseUrl: "http://127.0.0.1:<port>" })` 连接；实现 **health 轮询** 与 **断线重连**（退避策略）。
+- [x] **Sidecar/Command**：在 Tauri 中配置 OpenCode 为 sidecar，或从应用目录 spawn 子进程；启动命令固定为 `opencode serve --hostname 127.0.0.1 --port <port>`，端口可配置（如 4096），避免与已有进程冲突。（已实现 Tauri 命令 `start_opencode_serve(port)`，依赖本机 PATH 上的 opencode）
+- [x] **连接**：前端或 Tauri 层在「应用启动」或「连接」时，用 `@opencode-ai/sdk` 的 `createOpencodeClient({ baseUrl: "http://127.0.0.1:<port>" })` 连接；实现 **health 轮询** 与 **断线重连**（退避策略）。（已实现：侧栏「连接」触发 Tauri 启动 serve → 前端用 `@opencode-ai/sdk/v2/client` 创建客户端并 health 检查；连接后每 10s 轮询 health，失败则置为断线并允许重连）
 - [ ] **自测**：从「本机无 OpenCode」到「下载 → 启动 serve → 客户端连接」全流程可重复；重启应用后能自动启动进程并连接成功。
+- [ ] **（后续）连接其他 OpenCode 服务与认证**：若支持「连接别的 opencode 服务」（远程 URL 或他机），在该能力中一并实现认证（密码/HTTP Basic、如 `OPENCODE_SERVER_PASSWORD`）；当前仅面向本机内置实例，不做认证。
 
 ---
 

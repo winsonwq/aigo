@@ -1,0 +1,5 @@
+# Allow the frontend to invoke start_opencode_serve (spawn opencode serve).
+[[permission]]
+identifier = "allow-start-opencode-serve"
+description = "Enables the start_opencode_serve command to spawn OpenCode serve process."
+commands.allow = ["start_opencode_serve"]

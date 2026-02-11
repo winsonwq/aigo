@@ -1,4 +1,5 @@
 import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
+import { OpenCodeProvider } from "@/context/OpenCodeContext";
 import { Layout } from "@/components/Layout";
 import { Home } from "@/pages/Home";
 import { Session } from "@/pages/Session";
@@ -8,6 +9,7 @@ import "./App.css";
 
 function App() {
   return (
+    <OpenCodeProvider>
     <HashRouter>
       <Routes>
         <Route element={<Layout />}>
@@ -19,6 +21,7 @@ function App() {
         </Route>
       </Routes>
     </HashRouter>
+    </OpenCodeProvider>
   );
 }
 

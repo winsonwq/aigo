@@ -1,5 +1,7 @@
 # Git 提交规范 (Conventional Commits)
 
+**提交信息（message）使用英文**：subject、body、示例均以英文书写。
+
 - **feat**: 新功能
 - **fix**: 修复 bug
 - **docs**: 仅文档
@@ -10,8 +12,8 @@
 
 格式：`<type>(<scope>): <subject>`，scope 可选。
 
-示例：
+示例（英文 message）：
 
-- `feat(auth): 添加登录接口`
-- `fix(api): 修正分页参数`
-- `docs: 更新 README 安装步骤`
+- `feat(auth): add login endpoint`
+- `fix(api): correct pagination params`
+- `docs: update README setup steps`
