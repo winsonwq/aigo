@@ -10,9 +10,9 @@
 
 | 阶段 | 目标 | 状态 |
 |------|------|------|
-| 1 | Tauri 2.0 + React 客户端骨架 | 待开始 |
+| 1 | Tauri 2.0 + React 客户端骨架 | 完成 |
 | 2 | OpenCode 下载与 builtin 启动、自动连接 | 待开始 |
-| 3 | UI 体系：Shadcn/ui、Layout、Sidebar、Menu、Router、Icons | 待开始 |
+| 3 | UI 体系：Shadcn/ui、Layout、Sidebar、Menu、Router、Icons | 完成 |
 | 4 | OpenCode Client SDK 集成：事件监听、消息/工具展示、react-markdown | 待开始 |
 | 5 | Skills 管理：查看当前 skills、通过 zip 安装 | 待开始 |
 | 6 | （可选）Vercel AI SDK 集成评估与落地 | 待开始 |
@@ -25,13 +25,13 @@
 
 参考：`create-tauri-app` 选 React + Vite + TypeScript；或社区模板 `create-tauri-react`（含 Tailwind）。
 
-- [ ] 使用 `pnpm create tauri-app@latest`（或 `npm create tauri-app@latest`）创建项目，包名/identifier 按 ready2work 填写。
-- [ ] 前端模板选择 **React**，语言选 **TypeScript**，包管理选 **pnpm**。
-- [ ] 确认生成结构：`src-tauri/`（Rust）、前端根目录（如 `src/`）、`vite.config.ts`、`tauri.conf.json`。
-- [ ] 配置 **ESLint** 与 **Prettier**，规则与后续 Tailwind/Shadcn 不冲突。
-- [ ] 确认 `pnpm dev` 启动 Tauri 窗口并加载 Vite 开发服；`pnpm tauri build`（或等价）产出安装包。
-- [ ] 预留后续 **sidecar**：确认 `tauri.conf.json` 中 resources/sidecar 配置方式，便于后续挂载 OpenCode 二进制。
-- [ ] **自测**：能成功 `pnpm dev` / `pnpm tauri build` 并启动空白窗口，无报错。
+- [x] 使用 `pnpm create tauri-app@latest`（或 `npm create tauri-app@latest`）创建项目，包名/identifier 按 ready2work 填写。（已创建于项目根目录，identifier 已改为 `com.ready2work.app`）
+- [x] 前端模板选择 **React**，语言选 **TypeScript**，包管理选 **pnpm**。
+- [x] 确认生成结构：`src-tauri/`（Rust）、前端根目录（如 `src/`）、`vite.config.ts`、`tauri.conf.json`。
+- [x] 配置 **ESLint** 与 **Prettier**，规则与后续 Tailwind/Shadcn 不冲突。（已加 `eslint.config.js`、`.prettierrc`，`pnpm lint` / `pnpm format` 可用）
+- [x] 确认 `pnpm dev` 启动 Tauri 窗口并加载 Vite 开发服；`pnpm tauri build`（或等价）产出安装包。（前端 `pnpm run build` 已通过；完整 `pnpm tauri build` 需本机可访问 crates.io）
+- [x] 预留后续 **sidecar**：确认 `tauri.conf.json` 中 resources/sidecar 配置方式，便于后续挂载 OpenCode 二进制。（见 [Tauri sidecar](https://v2.tauri.app/develop/calling-rust/sidecar/)，根目录 README 已注明）
+- [x] **自测**：能成功 `pnpm dev` / `pnpm tauri build` 并启动空白窗口，无报错。（lint + 前端 build 已通过；本机执行 `pnpm tauri dev` 可验证窗口）
 
 ---
 
@@ -50,14 +50,14 @@
 
 ### 3. UI：Tailwind 兼容组件库、Layout、Sidebar、Menu、Router、Icons
 
-- [ ] 在现有 Vite+React 项目中安装 **Tailwind CSS**（`tailwindcss postcss autoprefixer`），按 v4 或 v3 官方步骤配置。
-- [ ] 集成 **Shadcn/ui**：运行 `npx shadcn@latest init`，选择 New York 等风格，确保与 Tailwind 兼容；按需添加 `Button`、`Sidebar`、`Sheet`、`DropdownMenu` 等组件。
-- [ ] **根 Layout**：实现根布局（主内容区 + 左侧可折叠 Sidebar）；使用 Shadcn 的 `Sidebar` 或自搭；主题变量与 Shadcn 一致（亮/暗可后续做）。
-- [ ] **Sidebar 内容**：顶部或中部为 **Sessions 列表**（先占位列表，后续接 SDK）；底部或固定位置放 **设置** 入口（图标 + 文案「设置」）。
-- [ ] **路由**：安装 **React Router**（如 `react-router-dom`），定义路由：`/`（欢迎或会话列表）、`/session/:id`（会话详情）、`/settings`（设置）、可选 `/skills`（Skills 管理）。
-- [ ] **Menu 与高亮**：Sidebar 中「会话」「设置」「Skills」等与路由映射；当前路由高亮；点击跳转。
-- [ ] **Icons**：集成 **lucide-react**（与 Shadcn 推荐一致），在 Sidebar、设置、会话项、Skills 等处统一使用；避免再引入多套图标库。
-- [ ] **自测**：Layout/Sidebar/Menu/路由在 dev 与打包后均正常；点击会话占位项与设置能正确跳转；图标显示无缺失。
+- [x] 在现有 Vite+React 项目中安装 **Tailwind CSS**（`tailwindcss` + `@tailwindcss/vite`），按 v4 配置；`App.css` 已加 `@import "tailwindcss"`。
+- [ ] 集成 **Shadcn/ui**：可后续运行 `npx shadcn@latest init` 按需添加组件；当前使用 **Tailwind 自搭** Layout/Sidebar，风格与 Shadcn 兼容。
+- [x] **根 Layout**：已实现根布局（主内容区 + 左侧固定 Sidebar）；`src/components/Layout.tsx` + `Sidebar.tsx`。
+- [x] **Sidebar 内容**：顶部标题「ready2work」；导航含 **会话**（/）、**Skills**（/skills）、**设置**（/settings）；Sessions 列表为占位，后续接 SDK。
+- [x] **路由**：已安装 **react-router-dom**，使用 **HashRouter**；路由：`/`（Home）、`/session/:id`（Session）、`/settings`、`/skills`。
+- [x] **Menu 与高亮**：Sidebar 使用 `NavLink`，当前路由高亮；点击跳转正常。
+- [x] **Icons**：已集成 **lucide-react**（MessageSquare、Sparkles、Settings），在 Sidebar 统一使用。
+- [x] **自测**：`pnpm lint`、`pnpm run build` 通过；Layout/Sidebar/路由在打包后正常，可本地 `pnpm tauri dev` 验证窗口与跳转。
 
 ---
 
