@@ -21,6 +21,7 @@ export function Sidebar() {
   const { status } = useOpenCode();
   const { sessions, isLoading, createSession, deleteSession } = useSessions();
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -29,9 +30,16 @@ export function Sidebar() {
   const handleNewSession = async () => {
     if (creating || !isConnected) return;
     setCreating(true);
+    setCreateError(null);
     try {
-      const id = await createSession();
-      if (id) navigate(`/session/${id}`);
+      const result = await createSession();
+      if ("id" in result && result.id) {
+        navigate(`/session/${result.id}`);
+      } else {
+        setCreateError(
+          "error" in result ? result.error : "创建会话失败，请检查 OpenCode 连接或重试。"
+        );
+      }
     } finally {
       setCreating(false);
     }
@@ -98,6 +106,11 @@ export function Sidebar() {
         {isConnected && (
           <>
             <Separator className="mx-2 my-2 w-auto bg-zinc-200/90 dark:bg-zinc-700/80" />
+            {createError && (
+              <p className="mb-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-300">
+                {createError}
+              </p>
+            )}
             {deleteError && (
               <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
                 {deleteError}

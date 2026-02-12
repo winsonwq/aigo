@@ -80,8 +80,7 @@ function ModelSelect({
                 opt.value === value && "bg-zinc-100 dark:bg-zinc-800"
               )}
             >
-              <div className="font-medium">{opt.label}</div>
-              <div className="truncate text-[11px] text-zinc-500 dark:text-zinc-400">{opt.value}</div>
+              <span className="block truncate font-medium">{opt.label}</span>
             </li>
           ))}
         </ul>

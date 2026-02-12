@@ -47,28 +47,66 @@ export function useSessions() {
     return () => clearInterval(id);
   }, [client, fetchSessions]);
 
-  const createSession = useCallback(async (): Promise<string | null> => {
-    if (!client) return null;
-    try {
-      const res = await client.session.create({ title: "新会话" });
-      const data = res?.data as
-        | { id?: string }
-        | { 200?: { id?: string } }
-        | undefined;
-      const session =
-        data && typeof data === "object" && "id" in data
-          ? data
-          : (data as Record<string, unknown>)?.[200];
-      const id = (session as { id?: string })?.id;
-      if (id) {
-        await fetchSessions();
-        return id;
+  const createSession = useCallback(
+    async (): Promise<{ id: string } | { error: string }> => {
+      if (!client) {
+        return { error: "未连接 OpenCode" };
       }
-      return null;
-    } catch {
-      return null;
-    }
-  }, [client, fetchSessions]);
+      try {
+        const res = await client.session.create({ title: "新会话" });
+        const raw = res as {
+          data?: unknown;
+          error?: unknown;
+          response?: { ok?: boolean; headers?: Headers };
+          [k: string]: unknown;
+        };
+        if (raw?.error) {
+          const err = raw.error as Record<string, unknown>;
+          const msg =
+            (err?.message as string) ||
+            (err?.detail as string) ||
+            (typeof raw.error === "string" ? raw.error : "创建失败");
+          return { error: msg };
+        }
+        const data = raw?.data;
+        if (data != null && typeof data === "object") {
+          const obj = data as Record<string, unknown>;
+          // SDK/服务端可能返回：Session 直接作为 data、{ 200: Session }、或 { session: Session }
+          const session =
+            typeof obj.id === "string"
+              ? obj
+              : (obj[200] as Record<string, unknown> | undefined) ??
+                (obj.session as Record<string, unknown> | undefined);
+          const id =
+            session && typeof session === "object"
+              ? (session.id as string) ?? (session.sessionID as string)
+              : null;
+          if (typeof id === "string" && id.length > 0) {
+            await fetchSessions();
+            return { id };
+          }
+        }
+        // 尝试从 Location 头解析（部分实现会返回 201 + Location）
+        const location = raw?.response?.headers?.get?.("Location");
+        if (typeof location === "string") {
+          const match = /\/session\/([^/?#]+)/.exec(location);
+          if (match?.[1]) {
+            await fetchSessions();
+            return { id: match[1] };
+          }
+        }
+        return { error: "服务端返回格式异常，无法解析会话 ID" };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return {
+          error:
+            msg ||
+            "创建会话失败，请检查 OpenCode 连接或重试。",
+        };
+      }
+    },
+    [client, fetchSessions]
+  );
 
   const deleteSession = useCallback(
     async (sessionID: string): Promise<boolean> => {

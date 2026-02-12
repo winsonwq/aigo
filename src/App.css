@@ -30,9 +30,12 @@ body {
   background: #f7f7f8;
 }
 
-.dark body {
-  color: #e4e4e7;
-  background: #0a0a0b;
+/* 与 Tailwind dark: 一致：跟随系统 prefers-color-scheme，使 layout/body 在深色模式下变深色 */
+@media (prefers-color-scheme: dark) {
+  body {
+    color: #e4e4e7;
+    background: #0a0a0b;
+  }
 }
 
 * {

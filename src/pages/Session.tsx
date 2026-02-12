@@ -190,8 +190,8 @@ function UserMessageBlock({ msg }: { msg: MessageWithParts }) {
     .map(getPartText)
     .join("\n");
   return (
-    <div className="mb-3">
-      <div className="w-full rounded-xl bg-zinc-200 px-3 py-2 text-sm dark:bg-zinc-700/90">
+    <div className="user mb-3">
+      <div className="w-full rounded-xl bg-zinc-200 px-3 py-2 text-base dark:bg-zinc-700/90">
         <p className="whitespace-pre-wrap">{text}</p>
       </div>
     </div>
@@ -201,7 +201,7 @@ function UserMessageBlock({ msg }: { msg: MessageWithParts }) {
 /** 助手单轮内的工具调用：每个一行气泡，可展开详情 */
 function AssistantToolCallGroup({ parts }: { parts: ToolPart[] }) {
   return (
-    <div className="flex flex-col gap-1">
+    <div className="tool flex flex-col gap-1">
       {parts.map((part, idx) => (
         <ToolPartBlock key={(part as { id?: string }).id ?? `tool-${idx}`} part={part} />
       ))}
@@ -214,13 +214,17 @@ function ThinkingPartBlock({ part }: { part: Record<string, unknown> }) {
   const text = getObjectValue(part, ["thinking", "reasoning", "content", "text", "summary"]) ?? "";
 
   return (
-    <details className="mt-2 rounded-lg border border-zinc-200/80 bg-zinc-50 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-800/70 dark:text-zinc-300" open={!!text}>
+    <details className="mt-2 rounded-lg border border-zinc-200/80 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800/70 dark:text-zinc-300" open={!!text}>
       <summary className="flex cursor-pointer list-none items-center gap-2 py-0.5">
         <Brain className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
         <span className="font-medium">Thinking</span>
         <Badge variant="secondary" className="text-[10px]">{type}</Badge>
       </summary>
-      {text && <div className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-zinc-700 dark:text-zinc-300">{text}</div>}
+      {text && (
+        <div className="markdown-content mt-2 text-zinc-700 dark:text-zinc-300">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+        </div>
+      )}
     </details>
   );
 }
@@ -240,14 +244,11 @@ function MessageBubble({
   const segments = buildAssistantSegments(msg.parts);
 
   return (
-    <div className="mb-1 w-full text-sm">
+    <div className="assistant mb-1 w-full text-base">
       {segments.map((seg) => {
         if (seg.kind === "text") {
           return (
-            <div
-              key={seg.key}
-              className="prose prose-sm dark:prose-invert max-w-none break-words prose-p:my-1.5 prose-pre:my-2 prose-pre:rounded-lg prose-pre:border prose-pre:border-zinc-200 prose-pre:bg-zinc-100 prose-pre:px-3 prose-pre:py-2 dark:prose-pre:border-zinc-700 dark:prose-pre:bg-zinc-800/80 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-headings:font-semibold prose-headings:tracking-tight prose-code:rounded prose-code:bg-zinc-200/80 prose-code:px-1 prose-code:py-0.5 prose-code:before:content-none prose-code:after:content-none dark:prose-code:bg-zinc-700/80"
-            >
+            <div key={seg.key} className="markdown-content">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{seg.text}</ReactMarkdown>
             </div>
           );
@@ -268,10 +269,7 @@ function MessageBubble({
               : null;
         if (fallbackText) {
           return (
-            <div
-              key={seg.key}
-              className="prose prose-sm dark:prose-invert max-w-none break-words prose-p:my-1.5 prose-pre:my-2"
-            >
+            <div key={seg.key} className="markdown-content">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{fallbackText}</ReactMarkdown>
             </div>
           );
@@ -326,7 +324,7 @@ function ToolPartBlock({ part }: { part: ToolPart }) {
   const outputText = (part.state?.output ?? "").trim();
 
   return (
-    <div>
+    <div className="tool">
       <button
         type="button"
         onClick={() => setExpanded((e) => !e)}
@@ -549,7 +547,7 @@ export function Session() {
           )}
         </div>
       </div>
-      <div className="px-6 pb-4 pt-2">
+      <div className="pb-2 abs">
         <form
           onSubmit={handleSubmit}
           className="mx-auto w-full max-w-4xl rounded-2xl border border-zinc-300/90 bg-white/95 dark:border-zinc-700 dark:bg-zinc-900/95"
@@ -567,7 +565,7 @@ export function Session() {
             placeholder="输入消息…"
             disabled={!isConnected || isSessionBusy}
             rows={4}
-            className="min-h-[110px] w-full resize-none bg-transparent px-4 py-3 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none disabled:opacity-60 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+            className="min-h-[80px] w-full resize-none bg-transparent px-4 py-3 text-base text-zinc-900 placeholder:text-zinc-400 outline-none disabled:opacity-60 dark:text-zinc-100 dark:placeholder:text-zinc-500"
           />
           {attachments.length > 0 && (
             <div className="flex flex-wrap gap-2 px-3 pb-2">
@@ -582,7 +580,7 @@ export function Session() {
           {attachmentError && (
             <p className="px-3 pb-2 text-xs text-zinc-500 dark:text-zinc-400">{attachmentError}</p>
           )}
-          <div className="flex items-center justify-between border-t border-zinc-200/80 px-2 py-2 dark:border-zinc-700/80">
+          <div className="flex items-center justify-between px-2 py-2">
             <div className="flex items-center gap-2">
               <input
                 ref={fileInputRef}

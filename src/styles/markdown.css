@@ -1,0 +1,210 @@
+/**
+ * Markdown 渲染区域样式（独立文件）
+ * 用于 AI 回复正文、Thinking 等使用 ReactMarkdown 的容器。
+ * 使用方式：在包裹 ReactMarkdown 的 div 上添加 class="markdown-content"。
+ */
+
+.markdown-content {
+  max-width: none;
+  word-break: break-word;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+/* 段落 */
+.markdown-content p {
+  margin-top: 0.375em;
+  margin-bottom: 0.375em;
+}
+
+.markdown-content p:first-child {
+  margin-top: 0;
+}
+
+.markdown-content p:last-child {
+  margin-bottom: 0;
+}
+
+/* 标题 */
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  margin-top: 0.75em;
+  margin-bottom: 0.375em;
+}
+
+.markdown-content h1:first-child,
+.markdown-content h2:first-child,
+.markdown-content h3:first-child,
+.markdown-content h4:first-child,
+.markdown-content h5:first-child,
+.markdown-content h6:first-child {
+  margin-top: 0;
+}
+
+/* 列表：显式恢复符号/数字，避免被全局 reset 清除 */
+.markdown-content ul {
+  margin-top: 0.375em;
+  margin-bottom: 0.375em;
+  padding-left: 1.5em;
+  list-style-type: disc;
+  list-style-position: outside;
+}
+
+.markdown-content ul ul {
+  list-style-type: circle;
+}
+
+.markdown-content ul ul ul {
+  list-style-type: square;
+}
+
+.markdown-content ol {
+  margin-top: 0.375em;
+  margin-bottom: 0.375em;
+  padding-left: 1.5em;
+  list-style-type: decimal;
+  list-style-position: outside;
+}
+
+.markdown-content ol ol {
+  list-style-type: lower-alpha;
+}
+
+.markdown-content ol ol ol {
+  list-style-type: lower-roman;
+}
+
+.markdown-content li {
+  margin-top: 0.125em;
+  margin-bottom: 0.125em;
+  display: list-item;
+}
+
+/* 代码块 pre */
+.markdown-content pre {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid #e4e4e7;
+  background-color: #f4f4f5;
+  overflow-x: auto;
+  font-size: 0.875em;
+}
+
+.markdown-content pre code {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: inherit;
+}
+
+/* 行内代码 */
+.markdown-content code {
+  padding: 0.125em 0.25em;
+  border-radius: 0.25em;
+  background-color: rgba(228, 228, 231, 0.8);
+  font-size: 0.875em;
+}
+
+.markdown-content code::before,
+.markdown-content code::after {
+  content: none;
+}
+
+/* 表格 */
+.markdown-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+.markdown-content th,
+.markdown-content td {
+  border: 1px solid #e4e4e7;
+  padding: 0.375rem 0.75rem;
+  text-align: left;
+}
+
+.markdown-content th {
+  background-color: #f4f4f5;
+  font-weight: 500;
+}
+
+.markdown-content tr:nth-child(even) td {
+  background-color: rgba(244, 244, 245, 0.5);
+}
+
+/* 引用 */
+.markdown-content blockquote {
+  margin: 0.5em 0;
+  padding-left: 1em;
+  border-left: 4px solid #d4d4d8;
+  color: #71717a;
+}
+
+/* 链接 */
+.markdown-content a {
+  color: #3b82f6;
+  text-decoration: underline;
+}
+
+.markdown-content a:hover {
+  color: #2563eb;
+}
+
+/* 分割线 */
+.markdown-content hr {
+  margin: 1em 0;
+  border: none;
+  border-top: 1px solid #e4e4e7;
+}
+
+/* ---------- 深色模式 ---------- */
+@media (prefers-color-scheme: dark) {
+  .markdown-content pre {
+    border-color: #3f3f46;
+    background-color: rgba(39, 39, 42, 0.8);
+  }
+
+  .markdown-content code {
+    background-color: rgba(63, 63, 70, 0.8);
+  }
+
+  .markdown-content th,
+  .markdown-content td {
+    border-color: #3f3f46;
+  }
+
+  .markdown-content th {
+    background-color: #27272a;
+  }
+
+  .markdown-content tr:nth-child(even) td {
+    background-color: rgba(39, 39, 42, 0.5);
+  }
+
+  .markdown-content blockquote {
+    border-left-color: #52525b;
+    color: #a1a1aa;
+  }
+
+  .markdown-content a {
+    color: #60a5fa;
+  }
+
+  .markdown-content a:hover {
+    color: #93c5fd;
+  }
+
+  .markdown-content hr {
+    border-top-color: #3f3f46;
+  }
+}
