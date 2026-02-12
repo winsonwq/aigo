@@ -1,5 +1,6 @@
 import { Outlet } from "react-router-dom";
 import { useOpenCode } from "@/context/OpenCodeContext";
+import { Button } from "@/components/ui/button";
 import { Sidebar } from "./Sidebar";
 
 function StatusBar() {
@@ -17,7 +18,7 @@ function StatusBar() {
           : "未连接";
 
   return (
-    <footer className="flex h-6 flex-shrink-0 items-center gap-1.5 border-t border-zinc-200 bg-zinc-50 px-3 text-[11px] text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+    <footer className="flex h-8 flex-shrink-0 items-center gap-2 px-3 text-[11px] text-zinc-600 dark:text-zinc-400">
       <span
         className={`h-1.5 w-1.5 shrink-0 rounded-full ${
           isConnected
@@ -34,13 +35,15 @@ function StatusBar() {
         {errorMessage ?? statusLabel}
       </span>
       {status === "error" && (
-        <button
+        <Button
           type="button"
+          variant="outline"
+          size="sm"
           onClick={() => void connect()}
-          className="ml-1 shrink-0 rounded px-1.5 py-0.5 text-[11px] text-zinc-600 hover:bg-zinc-200 dark:text-zinc-400 dark:hover:bg-zinc-700"
+          className="ml-1 h-6 px-2 text-[11px]"
         >
           重试
-        </button>
+        </Button>
       )}
     </footer>
   );
@@ -48,15 +51,17 @@ function StatusBar() {
 
 export function Layout() {
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white dark:bg-zinc-950">
-      {/* 主内容区：侧栏 + 页面 */}
-      <div className="flex min-h-0 flex-1">
-        <Sidebar />
-        <main className="min-h-0 flex-1 overflow-auto">
-          <Outlet />
-        </main>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {/* 主内容区：侧栏 + 页面 */}
+        <div className="flex min-h-0 flex-1">
+          <Sidebar />
+          <main className="min-h-0 flex-1 overflow-auto bg-transparent">
+            <Outlet />
+          </main>
+        </div>
+        <StatusBar />
       </div>
-      <StatusBar />
     </div>
   );
 }

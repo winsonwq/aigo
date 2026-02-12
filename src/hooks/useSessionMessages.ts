@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useOpenCode } from "@/context/OpenCodeContext";
+import { normalizeModel, readDefaultModel } from "@/config/models";
 
 const RECONCILE_RETRY_COUNT = 25;
 const RECONCILE_RETRY_DELAY_MS = 1_200;
-const FALLBACK_BUSY_TIMEOUT_MS = 60_000;
+/** 仅作为兜底：超过此时长未收到完成信号才提示。Agent 多轮工具/思考可能较久，不宜过短 */
+const FALLBACK_BUSY_TIMEOUT_MS = 300_000; // 5 分钟
 
 const USE_SYNC_PROMPT_KEY = "ready2work.useSyncPrompt";
 const DEBUG_MESSAGES_KEY = "ready2work.debugMessages";
-const DEFAULT_MODEL_KEY = "ready2work.defaultModel";
-const FALLBACK_MODEL = "openrouter/minimax/minimax-m1";
-const KNOWN_BAD_DEFAULTS = new Set(["openai/gpt-5.2-chat-latest"]);
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -38,19 +37,6 @@ function isDebugMessages(): boolean {
   }
 }
 
-function getDefaultModelRaw(): string {
-  try {
-    const v = localStorage.getItem(DEFAULT_MODEL_KEY)?.trim();
-    if (!v || KNOWN_BAD_DEFAULTS.has(v)) {
-      localStorage.setItem(DEFAULT_MODEL_KEY, FALLBACK_MODEL);
-      return FALLBACK_MODEL;
-    }
-    return v;
-  } catch {
-    return FALLBACK_MODEL;
-  }
-}
-
 function parseModel(raw: string): { providerID: string; modelID: string } | null {
   const text = raw.trim();
   const idx = text.indexOf("/");
@@ -62,7 +48,12 @@ function parseModel(raw: string): { providerID: string; modelID: string } | null
 }
 
 function getPreferredModel(): { providerID: string; modelID: string } {
-  const parsed = parseModel(getDefaultModelRaw());
+  const parsed = parseModel(readDefaultModel());
+  return parsed ?? { providerID: "openrouter", modelID: "minimax/minimax-m1" };
+}
+
+function getPreferredModelFromRaw(raw?: string): { providerID: string; modelID: string } {
+  const parsed = parseModel(normalizeModel(raw));
   return parsed ?? { providerID: "openrouter", modelID: "minimax/minimax-m1" };
 }
 
@@ -378,7 +369,10 @@ export function useSessionMessages(sessionId: string | undefined) {
   );
 
   const sendPrompt = useCallback(
-    async (text: string): Promise<boolean> => {
+    async (
+      text: string,
+      options?: { modelRaw?: string; attachmentContext?: string }
+    ): Promise<boolean> => {
       const debug = isDebugMessages();
       if (!client || !sessionId || !text.trim()) return false;
       if (isSessionBusy) return false;
@@ -389,8 +383,13 @@ export function useSessionMessages(sessionId: string | undefined) {
       const trimmed = text.trim();
       const now = Date.now();
       const beforeIds = new Set(messagesRef.current.map((m) => m.info.id));
-      const preferredModel = getPreferredModel();
+      const preferredModel = options?.modelRaw
+        ? getPreferredModelFromRaw(options.modelRaw)
+        : getPreferredModel();
       const preferredModelText = `${preferredModel.providerID}/${preferredModel.modelID}`;
+      const composedText = options?.attachmentContext
+        ? `${trimmed}\n\n${options.attachmentContext}`
+        : trimmed;
 
       // 乐观显示用户输入，随后统一由服务端消息列表覆盖本地状态。
       const userMsg: MessageWithParts = {
@@ -410,7 +409,7 @@ export function useSessionMessages(sessionId: string | undefined) {
       fallbackBusyTimeoutRef.current = setTimeout(() => {
         if (!unmountedRef.current) {
           setIsSessionBusy(false);
-          setSendError("等待回复超时，请检查 OpenCode 模型配置或重试。");
+          setSendError("等待时间较长。若界面仍在更新请继续等待；若长时间无响应请检查 OpenCode 配置或重试。");
         }
       }, FALLBACK_BUSY_TIMEOUT_MS);
 
@@ -420,13 +419,13 @@ export function useSessionMessages(sessionId: string | undefined) {
           await client.session.prompt({
             sessionID: sessionId,
             model: preferredModel,
-            parts: [{ type: "text", text: trimmed }],
+            parts: [{ type: "text", text: composedText }],
           });
         } else {
           await client.session.promptAsync({
             sessionID: sessionId,
             model: preferredModel,
-            parts: [{ type: "text", text: trimmed }],
+            parts: [{ type: "text", text: composedText }],
           });
         }
 
@@ -474,6 +473,20 @@ export function useSessionMessages(sessionId: string | undefined) {
     ]
   );
 
+  const stopSession = useCallback(async (): Promise<boolean> => {
+    if (!client || !sessionId || !isSessionBusy) return false;
+    try {
+      await client.session.abort({ sessionID: sessionId });
+      clearBusyState();
+      await fetchMessages({ silent: true });
+      return true;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setSendError(msg || "停止失败");
+      return false;
+    }
+  }, [client, sessionId, isSessionBusy, clearBusyState, fetchMessages]);
+
   return {
     messages,
     isLoading,
@@ -482,5 +495,6 @@ export function useSessionMessages(sessionId: string | undefined) {
     isSessionBusy,
     refetch: fetchMessages,
     sendPrompt,
+    stopSession,
   };
 }
