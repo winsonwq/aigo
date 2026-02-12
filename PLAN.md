@@ -70,10 +70,10 @@
 OpenCode 事件参考：[插件 (Plugins)](https://www.opencodecn.com/docs/plugins)（如 `session.*`、`message.updated`、`tool.execute.before`/`after`、`server.connected`）。
 
 - [x] 在连接成功后，使用 **@opencode-ai/sdk** 的 client 订阅/轮询 **会话列表**（若 SDK 或后端提供 list sessions API）；与 Sidebar 的 Sessions 列表状态同步（新建、切换、删除）。（已实现：`useSessions` 拉取 `session.list`、每 15s 刷新；Sidebar 与 Home 展示列表；新建会话 `session.create` 并跳转 `/session/:id`；删除待阶段 4 后续做）
-- [ ] **会话详情**：进入 `/session/:id` 时加载该会话的消息列表；区分 **用户消息** 与 **AI 消息**；若 SDK 支持流式，则对接流式更新并实时追加到 UI。
-- [ ] **Markdown 渲染**：安装 **react-markdown**；对 AI 消息内容用 react-markdown 渲染；配置 `remark-gfm`（表格、脚注等）、代码块高亮（如 `rehype-highlight` 或 `react-syntax-highlighter`）；防止 XSS（使用默认安全行为或 sanitize）。
-- [ ] **工具调用展示**：订阅或从消息上下文中拿到 `tool.execute.before`/`after` 等；在消息下方或右侧面板以列表/时间线形式展示「工具名、参数、结果/状态」。
-- [ ] **流式订阅**：使用 `client.event.subscribe()` 订阅 SSE；先订阅再 `client.session.prompt()`，在回调中处理 `message.part.updated` 等事件并按 sessionID 更新当前会话 UI（参考 [docs/openwork-reference.md](docs/openwork-reference.md)）。
+- [x] **会话详情**：进入 `/session/:id` 时加载该会话的消息列表；区分 **用户消息** 与 **AI 消息**；若 SDK 支持流式，则对接流式更新并实时追加到 UI。（已实现：`useSessionMessages` 拉取消息、Session 页展示用户/AI 气泡；发送 prompt 后 refetch；SSE 流式见下）
+- [x] **Markdown 渲染**：安装 **react-markdown**；对 AI 消息内容用 react-markdown 渲染；配置 `remark-gfm`（表格、脚注等）、代码块高亮（如 `rehype-highlight` 或 `react-syntax-highlighter`）；防止 XSS（使用默认安全行为或 sanitize）。（已实现：react-markdown + remark-gfm，代码块高亮可后续加 rehype-highlight）
+- [x] **工具调用展示**：订阅或从消息上下文中拿到 `tool.execute.before`/`after` 等；在消息下方或右侧面板以列表/时间线形式展示「工具名、参数、结果/状态」。（已实现：从消息 parts 中 type===tool 的 part 展示工具名、状态、input/output/error）
+- [x] **流式订阅**：使用 `client.event.subscribe()` 订阅 SSE；先订阅再 `client.session.prompt()`，在回调中处理 `message.part.updated` 等事件并按 sessionID 更新当前会话 UI（参考 [docs/openwork-reference.md](docs/openwork-reference.md)）。（已实现：`useSessionMessages` 内订阅 event.stream，对 message.part.updated 按 sessionID 合并 part/delta 到本地 messages 状态）
 - [ ] **Session Artifacts（产出/修改文件列表）**：在会话内展示本 session 涉及的 **artifacts**——即本轮对话中**被创建或修改的文件**。数据来源：从工具调用中汇总（如 `edit`、`write`、`patch` 等工具的参数中的文件路径），或从事件流中的 `file.edited`、`file.watcher.updated` 等（若 SDK/服务端暴露）按 session 聚合。在会话页用**列表/面板**展示：文件路径、操作类型（新建/修改）、可选时间或顺序；支持点击在编辑器中打开或定位（若后续集成）。详见 [docs/openwork-reference.md](docs/openwork-reference.md) 中「文件与 Artifacts」。
 - [ ] **自测**：创建会话、发消息、触发工具调用后，会话列表、消息内容（含 Markdown）、工具调用展示正确；流式无错乱；**产出的文件在 Artifacts 列表中正确列出**（新建/修改可区分）。
 

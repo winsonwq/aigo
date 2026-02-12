@@ -1,0 +1,5 @@
+# Allow the frontend to get OS/arch for OpenCode download.
+[[permission]]
+identifier = "allow-get-platform"
+description = "Enables the get_platform command to return current OS and architecture."
+commands.allow = ["get_platform"]

@@ -6,7 +6,7 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "allow-start-opencode-serve",
+    "allow-get-platform","allow-start-opencode-serve",
     "core:window:default",
     "core:window:allow-start-dragging",
     "core:window:allow-close",

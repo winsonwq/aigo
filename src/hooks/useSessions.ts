@@ -11,7 +11,7 @@ export type SessionItem = {
 const LIST_LIMIT = 50;
 
 export function useSessions() {
-  const { client } = useOpenCode();
+  const { client, baseUrl } = useOpenCode();
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,5 +70,43 @@ export function useSessions() {
     }
   }, [client, fetchSessions]);
 
-  return { sessions, isLoading, error, refetch: fetchSessions, createSession };
+  const deleteSession = useCallback(
+    async (sessionID: string): Promise<boolean> => {
+      if (!client || !sessionID) return false;
+      try {
+        const api = client.session as unknown as {
+          delete?: (args: { sessionID: string } | { id: string }) => Promise<unknown>;
+        };
+        if (typeof api.delete === "function") {
+          try {
+            await api.delete({ sessionID });
+          } catch {
+            await api.delete({ id: sessionID });
+          }
+        } else {
+          const res = await fetch(
+            `${baseUrl}/session/${encodeURIComponent(sessionID)}`,
+            { method: "DELETE" }
+          );
+          if (!res.ok) {
+            throw new Error(`删除会话失败: ${res.status}`);
+          }
+        }
+        await fetchSessions();
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [client, baseUrl, fetchSessions]
+  );
+
+  return {
+    sessions,
+    isLoading,
+    error,
+    refetch: fetchSessions,
+    createSession,
+    deleteSession,
+  };
 }
