@@ -14,7 +14,7 @@
 | 2    | OpenCode 下载与 builtin 启动、自动连接                            | 进行中 |
 | 3    | UI 体系：Shadcn/ui、Layout、Sidebar、Menu、Router、Icons          | 完成   |
 | 4    | OpenCode Client SDK 集成：事件监听、消息/工具展示、react-markdown | 待开始 |
-| 5    | Skills 管理：查看当前 skills、通过 zip 安装                       | 待开始 |
+| 5    | Skills 管理：查看当前 skills、通过 zip 安装、打开 SKILL 文件夹   | 进行中 |
 | 6    | （可选）Vercel AI SDK 集成评估与落地                              | 待开始 |
 
 ---
@@ -87,12 +87,12 @@ OpenCode 会在多路径下检索 `SKILL.md`：[Agent Skills](https://opencode.a
 - 全局：`~/.config/opencode/skills/<name>/SKILL.md`、`~/.claude/skills/`、`~/.agents/skills/`  
   每个 skill 为目录，内含 `SKILL.md`，且需 YAML frontmatter：`name`（必填）、`description`（必填）。OpenWork 有 Skills Manager：列表展示、从包安装、导入本地目录；可参考 [different-ai/openwork](https://github.com/different-ai/openwork)。
 
-- [ ] **Skills 页面**：在路由中增加 **Skills 管理** 页（如 `/skills`），Sidebar 增加入口（图标 + 「Skills」）。
-- [ ] **「当前检索到的 skills」**：实现「当前会被 OpenCode 检索到的 skills」列表。若 SDK/服务端有 list skills API 则直接调用；否则在前端或通过 Tauri 读取上述目录（优先当前工作区 `.opencode/skills`、`.claude/skills`、`.agents/skills`，以及用户目录 `~/.config/opencode/skills` 等），扫描子目录内是否存在 `SKILL.md`，解析 frontmatter 取 `name`、`description`，去重后展示（可标注来源：项目/全局）。
-- [ ] **列表 UI**：表格或卡片展示 skill 的 name、description、路径/来源；支持按名称搜索或筛选。
-- [ ] **通过 zip 安装**：提供「从 zip 安装」入口（如按钮 + 文件选择）。选择 zip 后：由 Tauri 或前端解压到目标目录（建议全局：`~/.config/opencode/skills/<skill-name>/`，或由用户选「当前项目」则解压到当前工作区 `.opencode/skills/<skill-name>/`）；解压后目录内必须包含 `SKILL.md`，且 frontmatter 含 `name`、`description`，否则提示安装失败并清理不完整目录；安装成功后刷新「当前检索到的 skills」列表。
-- [ ] **zip 格式约定**：文档或 UI 中说明：zip 内应为「单层目录且内含 SKILL.md」或「根目录即 SKILL.md」；安装时以 frontmatter 的 `name` 作为目录名（若 zip 根目录名与 name 不一致则按 name 创建目录）。
-- [ ] **自测**：在空目录下「当前 skills」为空或仅系统默认；放入一个合法 skill 目录后列表出现该 skill；用 zip（含 SKILL.md + 合法 frontmatter）安装后列表更新且 OpenCode 能检索到；非法 zip 或缺少 SKILL.md 时提示错误且不破坏已有 skills。
+- [x] **Skills 页面**：在路由中增加 **Skills 管理** 页（如 `/skills`），Sidebar 增加入口（图标 + 「Skills」）。（已实现）
+- [x] **「当前检索到的 skills」**：实现「当前会被 OpenCode 检索到的 skills」列表。数据来自 `client.app.skills()`，服务端聚合各路径下 SKILL.md。（已实现：`useSkills` + Skills 页列表）
+- [x] **列表 UI**：卡片展示 skill 的 name、description、路径/来源；支持按名称/描述/路径搜索筛选；每项支持**打开所在文件夹**（`openPath(location)`）。（已实现）
+- [x] **通过 zip 安装**：提供「从 zip 安装」入口（按钮 + 文件选择）。选择 zip 后由 Tauri 命令 `install_skill_from_zip` 解压到目标目录（全局 `~/.config/opencode/skills/<name>/` 或用户选的项目目录 `.opencode/skills/<name>/`）；解压后校验 SKILL.md 与 frontmatter，失败则清理并提示。（已实现）
+- [x] **zip 格式约定**：UI 文案说明 zip 内需包含 SKILL.md 且含 name、description 的 YAML frontmatter；支持 zip 根目录即 SKILL.md 或单层子目录内含 SKILL.md。（已实现）
+- [ ] **自测**：在空目录下「当前 skills」为空或仅系统默认；放入一个合法 skill 目录后列表出现该 skill；用 zip（含 SKILL.md + 合法 frontmatter）安装后列表更新且 OpenCode 能检索到；非法 zip 或缺少 SKILL.md 时提示错误且不破坏已有 skills；点击「打开所在文件夹」能打开系统文件管理器。
 
 ---
 
