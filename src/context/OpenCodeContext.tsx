@@ -70,7 +70,7 @@ export function OpenCodeProvider({ children }: { children: ReactNode }) {
     setStatus("connecting");
     setErrorMessage(null);
 
-    // 一套流程：由 ready2work 负责启动 OpenCode 并连接，用户无需本机单独安装/启动。
+    // 一套流程：由 AIGO 负责启动 OpenCode 并连接，用户无需本机单独安装/启动。
     // 当前从 PATH 启动 opencode；后续版本将改为内置/下载的二进制。
     const tryConnect = async (): Promise<
       { client: OpencodeClient } | { error: string }

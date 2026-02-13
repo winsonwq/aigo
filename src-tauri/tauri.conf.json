@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ready2work",
+  "productName": "AIGO",
   "version": "0.1.0",
-  "identifier": "com.ready2work.app",
+  "identifier": "com.aigo.app",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "ready2work",
+        "title": "AIGO",
         "width": 800,
         "height": 600
       }

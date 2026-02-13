@@ -2,7 +2,7 @@
 
 ## 目标
 
-- 做一个基于 OpenCode 的类 OpenWork 桌面应用（ready2work）：Tauri 2.0 + React 前端，内置 OpenCode 的下载与自启动连接，完整会话/消息/工具调用展示、Skills 管理，并预留与 Vercel AI SDK 集成的评估空间。
+- 做一个基于 OpenCode 的类 OpenWork 桌面应用（AIGO）：Tauri 2.0 + React 前端，内置 OpenCode 的下载与自启动连接，完整会话/消息/工具调用展示、Skills 管理，并预留与 Vercel AI SDK 集成的评估空间。
 
 ---
 
@@ -25,7 +25,7 @@
 
 参考：`create-tauri-app` 选 React + Vite + TypeScript；或社区模板 `create-tauri-react`（含 Tailwind）。
 
-- [x] 使用 `pnpm create tauri-app@latest`（或 `npm create tauri-app@latest`）创建项目，包名/identifier 按 ready2work 填写。（已创建于项目根目录，identifier 已改为 `com.ready2work.app`）
+- [x] 使用 `pnpm create tauri-app@latest`（或 `npm create tauri-app@latest`）创建项目，包名/identifier 按 AIGO 填写。（已创建于项目根目录，identifier 已改为 `com.aigo.app`）
 - [x] 前端模板选择 **React**，语言选 **TypeScript**，包管理选 **pnpm**。
 - [x] 确认生成结构：`src-tauri/`（Rust）、前端根目录（如 `src/`）、`vite.config.ts`、`tauri.conf.json`。
 - [x] 配置 **ESLint** 与 **Prettier**，规则与后续 Tailwind/Shadcn 不冲突。（已加 `eslint.config.js`、`.prettierrc`，`pnpm lint` / `pnpm format` 可用）
@@ -57,7 +57,7 @@
 - [x] 在现有 Vite+React 项目中安装 **Tailwind CSS**（`tailwindcss` + `@tailwindcss/vite`），按 v4 配置；`App.css` 已加 `@import "tailwindcss"`。
 - [ ] 集成 **Shadcn/ui**：可后续运行 `npx shadcn@latest init` 按需添加组件；当前使用 **Tailwind 自搭** Layout/Sidebar，风格与 Shadcn 兼容。
 - [x] **根 Layout**：已实现根布局（主内容区 + 左侧固定 Sidebar）；`src/components/Layout.tsx` + `Sidebar.tsx`。
-- [x] **Sidebar 内容**：顶部标题「ready2work」；导航含 **会话**（/）、**Skills**（/skills）、**设置**（/settings）；Sessions 列表为占位，后续接 SDK。
+- [x] **Sidebar 内容**：顶部标题「AIGO」；导航含 **会话**（/）、**Skills**（/skills）、**设置**（/settings）；Sessions 列表为占位，后续接 SDK。
 - [x] **路由**：已安装 **react-router-dom**，使用 **HashRouter**；路由：`/`（Home）、`/session/:id`（Session）、`/settings`、`/skills`。
 - [x] **Menu 与高亮**：Sidebar 使用 `NavLink`，当前路由高亮；点击跳转正常。
 - [x] **Icons**：已集成 **lucide-react**（MessageSquare、Sparkles、Settings），在 Sidebar 统一使用。
@@ -113,7 +113,7 @@ OpenWork 与 OpenCode 的通信方式、API 用法、可选方案已整理到 **
   - 使用 **`client.event.subscribe()`** 订阅 SSE，处理 `message.part.updated` 等实现流式对话；健康检查用 `client.global.health()`，用于重连与状态展示。
 - **流式对话**：先 `event.subscribe()` 再 `session.prompt()`，在回调里按 `sessionID` 过滤并更新 UI（与 OpenWork 一致）。
 - **可选：SQLite 直读**：若需要与 OpenWork 一致的会话列表性能或离线历史，可读 `~/.opencode/opencode.db`（或项目内 `.opencode/opencode.db`）的 `sessions` / `messages` 表；表结构见 openwork-reference.md。
-- **可选：MCP Bridge**：若需要「权限在桌面端弹窗」「流式进度」「自定义工具（如原生文件选择）」再考虑让 ready2work 作为 MCP 服务被 OpenCode 连接；OpenWork 通过 opencode-bridge 实现。
+- **可选：MCP Bridge**：若需要「权限在桌面端弹窗」「流式进度」「自定义工具（如原生文件选择）」再考虑让 AIGO 作为 MCP 服务被 OpenCode 连接；OpenWork 通过 opencode-bridge 实现。
 - **可选：执行计划 / Todos**：将 OpenCode 的 todos 渲染为时间线（OpenWork 的 execution plan）；可在「消息/工具展示」之后加一子任务。
 - **可选：模板**：保存并复用 prompt 模板（小工作流），后续在设置或会话入口加「模板」管理即可。
 

@@ -1,4 +1,4 @@
-export const DEFAULT_MODEL_KEY = "ready2work.defaultModel";
+export const DEFAULT_MODEL_KEY = "aigo.defaultModel";
 export const FALLBACK_MODEL = "openrouter/minimax/minimax-m1";
 export const KNOWN_BAD_DEFAULTS = new Set(["openai/gpt-5.2-chat-latest"]);
 

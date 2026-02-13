@@ -1,6 +1,6 @@
 # 从 OpenWork 可参考的基础功能与 OpenCode 使用方式
 
-本文档整理 [different-ai/openwork](https://github.com/different-ai/openwork) 中与 **OpenCode 客户端使用** 及基础功能相关的、可供 ready2work 参考的部分。
+本文档整理 [different-ai/openwork](https://github.com/different-ai/openwork) 中与 **OpenCode 客户端使用** 及基础功能相关的、可供 AIGO 参考的部分。
 
 ---
 
@@ -14,7 +14,7 @@ OpenWork 通过 **opencode-bridge** 与 OpenCode 运行时通信，采用三种�
 | **SQLite 直读**    | 会话列表、消息历史、元数据         | 直接读取 OpenCode 的数据库 `~/.opencode/opencode.db`（或项目内 `.opencode/opencode.db`），表包括 `sessions`、`messages`（含 `parts` JSON）。适合做列表、搜索、离线展示。 |
 | **MCP Bridge**     | 实时权限弹窗、流式进度、自定义工具 | OpenWork 作为 MCP 服务被 OpenCode 连接；用于权限确认、流式推送、暴露原生能力（如文件选择器）。                                                                           |
 
-- **ready2work 建议**：优先用 **SDK + HTTP API** 实现会话/消息与事件流；若需要与 OpenWork 一致的列表性能或离线能力，再考虑 **SQLite 直读**；若需要权限确认、自定义工具再考虑 **MCP Bridge**。
+- **AIGO 建议**：优先用 **SDK + HTTP API** 实现会话/消息与事件流；若需要与 OpenWork 一致的列表性能或离线能力，再考虑 **SQLite 直读**；若需要权限确认、自定义工具再考虑 **MCP Bridge**。
 
 ---
 
@@ -33,7 +33,7 @@ OpenWork 通过 **opencode-bridge** 与 OpenCode 运行时通信，采用三种�
   - `GET /global/event` → 全局事件流
   - 使用 **`client.event.subscribe()`** 订阅 SSE，可收到如 `message.part.updated` 等流式事件，用于实时更新 UI。
 
-**ready2work 推荐**：默认使用 **同步** `client.session.prompt()`：该调用会阻塞直到 AI 回复完成，并**直接返回** `{ info: AssistantMessage, parts }`，前端用返回值即可展示回复，无需轮询或 SSE。流式场景可选用异步 `promptAsync` + 有限次拉取或 SSE。
+**AIGO 推荐**：默认使用 **同步** `client.session.prompt()`：该调用会阻塞直到 AI 回复完成，并**直接返回** `{ info: AssistantMessage, parts }`，前端用返回值即可展示回复，无需轮询或 SSE。流式场景可选用异步 `promptAsync` + 有限次拉取或 SSE。
 
 ---
 
@@ -62,7 +62,7 @@ OpenWork 通过 **opencode-bridge** 与 OpenCode 运行时通信，采用三种�
 
 ## 5. OpenWork 桌面端已实现的基础功能（可对照实现）
 
-以下为 OpenWork 已具备、可在 ready2work 中按需实现的能力：
+以下为 OpenWork 已具备、可在 AIGO 中按需实现的能力：
 
 - **Host / Client 模式**：本地启动 `opencode serve`（Host）或连接远程 OpenCode URL（Client）。
 - **会话**：创建、列表、切换、删除；发 prompt，收回复。
@@ -70,7 +70,7 @@ OpenWork 通过 **opencode-bridge** 与 OpenCode 运行时通信，采用三种�
 - **执行计划 / Todos**：将 OpenCode 的 todos 渲染为时间线（execution plan）。
 - **权限**：在 UI 中展示并处理 OpenCode 的权限请求（通过 MCP 或事件）。
 - **模板**：保存并复用小工作流（prompt 模板）。
-- **Skills 管理**：列表展示、从包安装、导入本地目录（ready2work 已规划 + zip 安装）。
+- **Skills 管理**：列表展示、从包安装、导入本地目录（AIGO 已规划 + zip 安装）。
 
 ---
 
@@ -110,11 +110,11 @@ OpenWork 通过 **opencode-bridge** 与 OpenCode 运行时通信，采用三种�
 
 ---
 
-## 9. 阶段 2 调研结论：OpenCode 内置/下载与 sidecar（ready2work）
+## 9. 阶段 2 调研结论：OpenCode 内置/下载与 sidecar（AIGO）
 
 - **OpenWork 现状**（[Issue #121](https://github.com/different-ai/openwork/issues/121)）：OpenWork 默认从 PATH 启动 OpenCode，**不打包 sidecar**（release 无 `externalBin`）；`engine_install` 仅支持 macOS/Linux（curl \| bash），Windows 显式返回「不支持」。用户需自行安装 CLI，易出现「CLI not found」「serve unavailable」「exited immediately」等问题。
 - **OpenCode CLI 获取方式**：官方未提供「单文件 CLI 二进制」直接下载页。安装方式为：`curl -fsSL https://opencode.ai/install | bash`、`npm i -g opencode-ai`、`brew install anomalyco/tap/opencode` 等；桌面版 DMG/安装包见 [opencode.ai/download](https://opencode.ai/download)，为桌面应用而非 CLI。
-- **ready2work 当前策略**：从本机 **PATH** 启动 `opencode serve`；若未安装则提示用户安装（如 `brew install opencode`）。**后续可做**：解析官方 install 脚本得到各平台二进制 URL，或使用固定版本号 + GitHub Releases（若 OpenCode 提供 CLI 独立包），实现「下载到应用目录 → 从应用目录 spawn」；需运行时根据 OS/arch 选择对应构建（已预留 Tauri 侧 `get_platform` 命令）。
+- **AIGO 当前策略**：从本机 **PATH** 启动 `opencode serve`；若未安装则提示用户安装（如 `brew install opencode`）。**后续可做**：解析官方 install 脚本得到各平台二进制 URL，或使用固定版本号 + GitHub Releases（若 OpenCode 提供 CLI 独立包），实现「下载到应用目录 → 从应用目录 spawn」；需运行时根据 OS/arch 选择对应构建（已预留 Tauri 侧 `get_platform` 命令）。
 
 ---
 
@@ -126,7 +126,7 @@ OpenWork 通过 **opencode-bridge** 与 OpenCode 运行时通信，采用三种�
    在终端执行 `opencode config` 或查看 OpenCode 文档，确保已配置可用的模型（如 Claude、GPT 等）。未配置时服务端可能不返回内容或返回空。
 
 2. **尝试「使用同步发送」**  
-   在 ready2work **设置** 中勾选「使用同步发送（等待完整回复）」。此时会调用同步接口 `POST /session/:id/message` 并阻塞直到收到完整回复。若同步能拿到回复而异步没有，多半是 SSE/事件流或 `prompt_async` 路径问题；若同步也没有回复，则更可能是服务端配置或模型问题。
+   在 AIGO **设置** 中勾选「使用同步发送（等待完整回复）」。此时会调用同步接口 `POST /session/:id/message` 并阻塞直到收到完整回复。若同步能拿到回复而异步没有，多半是 SSE/事件流或 `prompt_async` 路径问题；若同步也没有回复，则更可能是服务端配置或模型问题。
 
 3. **工作区目录（directory）**  
    若 OpenCode 服务端要求项目上下文，可能需要在请求中传入 `directory`。当前实现未传 directory；若官方文档或服务端要求该参数，可在设置中增加「工作区目录」选项，并在 `prompt` / `promptAsync`、`messages` 等调用中传入。
@@ -136,8 +136,8 @@ OpenWork 通过 **opencode-bridge** 与 OpenCode 运行时通信，采用三种�
 
 5. **开发调试**  
    - **控制台位置**：若用 `pnpm tauri dev` 跑的是 Tauri 桌面窗口，必须在**应用窗口**上打开开发者工具（在窗口内右键 →「检查」/ Inspect，或菜单/快捷键），在**该窗口**的 Console 里看日志；浏览器里另开的标签页或终端的控制台都看不到应用内的 `console.log`。
-   - 进入任意会话页时，控制台**一定会**出现一行 `[ready2work] useSessionMessages mounted, sessionId: xxx`。若这行都没有，说明看的不是当前应用窗口的 Console。
+   - 进入任意会话页时，控制台**一定会**出现一行 `[aigo] useSessionMessages mounted, sessionId: xxx`。若这行都没有，说明看的不是当前应用窗口的 Console。
    - 在 **设置** 中勾选「开启消息调试」，或在地址栏加 `?debug=1`（如 `http://localhost:5173/?debug=1#/session/xxx`）后，Console 会看到：
-     - `[ready2work:messages]`：拉取消息列表 API 的原始响应、normalize 后的条数、解析后的消息角色列表（user/assistant）。若这里只有 user 没有 assistant，说明服务端 GET message 未返回回复。
-     - `[ready2work:sse]`：SSE 事件类型与 properties。若发送后没有任何 `message.part.updated`，说明事件流未推送或未订阅到；若有事件但 sessionID 与当前会话不一致，可能是过滤逻辑问题（已做修复：无 sessionID 时按当前会话处理）。
+     - `[aigo:messages]`：拉取消息列表 API 的原始响应、normalize 后的条数、解析后的消息角色列表（user/assistant）。若这里只有 user 没有 assistant，说明服务端 GET message 未返回回复。
+     - `[aigo:sse]`：SSE 事件类型与 properties。若发送后没有任何 `message.part.updated`，说明事件流未推送或未订阅到；若有事件但 sessionID 与当前会话不一致，可能是过滤逻辑问题（已做修复：无 sessionID 时按当前会话处理）。
    - 可根据上述日志判断问题在「接口未返回 assistant」还是「SSE 未触发/被过滤」。

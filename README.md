@@ -1,4 +1,4 @@
-# ready2work
+# AIGO
 
 基于 OpenCode 的类 OpenWork 桌面应用（Tauri 2 + React），便于快速开工与协作。
 

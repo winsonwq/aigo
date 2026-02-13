@@ -76,7 +76,7 @@ export function Sidebar() {
     <aside className="flex w-64 flex-col bg-transparent">
       <div className="flex h-14 items-center px-4">
         <span className="text-sm font-semibold tracking-wide text-zinc-900 dark:text-zinc-100">
-          ready2work
+          AIGO
         </span>
       </div>
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2.5">

@@ -7,8 +7,8 @@ const RECONCILE_RETRY_DELAY_MS = 1_200;
 /** 仅作为兜底：超过此时长未收到完成信号才提示。Agent 多轮工具/思考可能较久，不宜过短 */
 const FALLBACK_BUSY_TIMEOUT_MS = 300_000; // 5 分钟
 
-const USE_SYNC_PROMPT_KEY = "ready2work.useSyncPrompt";
-const DEBUG_MESSAGES_KEY = "ready2work.debugMessages";
+const USE_SYNC_PROMPT_KEY = "aigo.useSyncPrompt";
+const DEBUG_MESSAGES_KEY = "aigo.debugMessages";
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -200,7 +200,7 @@ export function useSessionMessages(sessionId: string | undefined) {
 
       if (!client || !sessionId) {
         if (debug) {
-          console.log("[ready2work:messages] skip fetch, no client/session", {
+          console.log("[aigo:messages] skip fetch, no client/session", {
             hasClient: !!client,
             sessionId: sessionId ?? "(undefined)",
           });
@@ -225,7 +225,7 @@ export function useSessionMessages(sessionId: string | undefined) {
           .filter((m): m is MessageWithParts => m != null);
 
         if (debug) {
-          console.log("[ready2work:messages] fetched", {
+          console.log("[aigo:messages] fetched", {
             count: list.length,
             roles: list.map((m) => m.info.role),
             silent,
@@ -242,7 +242,7 @@ export function useSessionMessages(sessionId: string | undefined) {
           setError(msg || "获取消息失败");
         }
         if (debug) {
-          console.error("[ready2work:messages] fetch failed", msg);
+          console.error("[aigo:messages] fetch failed", msg);
         }
         return messagesRef.current;
       } finally {
@@ -307,7 +307,7 @@ export function useSessionMessages(sessionId: string | undefined) {
         const stream = result?.stream;
         if (!stream || typeof stream[Symbol.asyncIterator] !== "function") {
           if (debug) {
-            console.log("[ready2work:sse] no stream or stream not iterable");
+            console.log("[aigo:sse] no stream or stream not iterable");
           }
           return;
         }
@@ -329,7 +329,7 @@ export function useSessionMessages(sessionId: string | undefined) {
         }
       } catch (e) {
         if (debug) {
-          console.warn("[ready2work:sse] subscribe failed", e);
+          console.warn("[aigo:sse] subscribe failed", e);
         }
       }
     })();
@@ -456,7 +456,7 @@ export function useSessionMessages(sessionId: string | undefined) {
         setSendError(msg ? `模型 ${preferredModelText} 发送失败：${msg}` : "发送失败");
         await fetchMessages({ silent: true });
         if (debug) {
-          console.error("[ready2work:send] send failed", msg);
+          console.error("[aigo:send] send failed", msg);
         }
         return false;
       } finally {
