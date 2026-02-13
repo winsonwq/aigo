@@ -30,6 +30,7 @@ import {
   type MessagePart,
   type ToolPart,
 } from "@/hooks/useSessionMessages";
+import { PermissionDialog } from "@/components/PermissionDialog";
 
 function isTextPart(p: MessagePart): p is { type: "text"; text?: string; content?: string } {
   return p && typeof p === "object" && "type" in p && p.type === "text";
@@ -435,7 +436,7 @@ function ToolPartBlock({
 export function Session() {
   const { id } = useParams<{ id: string }>();
   const { status: openCodeStatus } = useOpenCode();
-  const { sessions, refetch: refetchSessions } = useSessions();
+  const { sessions, refetch: refetchSessions, getSession } = useSessions();
   const {
     messages,
     isLoading,
@@ -444,12 +445,32 @@ export function Session() {
     isSessionBusy,
     sendPrompt,
     stopSession,
+    pendingPermission,
+    respondToPermission,
   } = useSessionMessages(id);
 
+  /** 从 OpenCode 单会话详情拉取的标题（服务端会自动更新，如首条消息摘要） */
+  const [detailTitle, setDetailTitle] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!id || !getSession) {
+      setDetailTitle(null);
+      return;
+    }
+    setDetailTitle(null);
+    let cancelled = false;
+    getSession(id).then((detail) => {
+      if (!cancelled && detail) setDetailTitle(detail.title);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, getSession]);
+
   const sessionTitle =
-    id && sessions.length > 0
-      ? sessions.find((s) => s.id === id)?.title ?? "新会话"
-      : "新会话";
+    detailTitle ??
+    (id && sessions.length > 0 ? sessions.find((s) => s.id === id)?.title : null) ??
+    "新会话";
   const [input, setInput] = useState("");
   const [selectedModel, setSelectedModel] = useState(() => readDefaultModel());
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -477,6 +498,12 @@ export function Session() {
       setAttachments([]);
       setAttachmentError(null);
       void refetchSessions();
+      // OpenCode 会在首条回复后自动更新会话标题，拉取单会话详情以更新页面标题
+      if (id && getSession) {
+        getSession(id).then((detail) => {
+          if (detail) setDetailTitle(detail.title);
+        });
+      }
     }
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   };
@@ -553,6 +580,12 @@ export function Session() {
 
   return (
     <div className="relative flex h-full flex-col">
+      {pendingPermission && (
+        <PermissionDialog
+          request={pendingPermission}
+          onRespond={respondToPermission}
+        />
+      )}
       <div className="px-6 pb-3 pt-5 shrink-0">
         <div className="mx-auto w-full max-w-4xl">
           <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100 truncate" title={sessionTitle}>

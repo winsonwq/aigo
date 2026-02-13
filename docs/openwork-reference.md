@@ -74,6 +74,38 @@ OpenWork 通过 **opencode-bridge** 与 OpenCode 运行时通信，采用三种�
 
 ---
 
+## 5.1 OpenCode 工具执行的授权机制（写文件等为何「没法交互」）
+
+当 OpenCode 要执行需要用户批准的操作（如 **write** 新建/覆盖文件、**edit** 修改文件、**bash** 执行命令）时，行为由 **opencode.json** 的 `permission` 配置决定：
+
+- **`allow`**：直接执行，无需交互。
+- **`ask`**：先请求用户批准，再执行或拒绝。
+- **`deny`**：直接拒绝，不执行。
+
+默认不少操作是 `allow`；若你或项目里把 `edit`/`write` 等配成了 **`ask`**，则：
+
+1. OpenCode 服务端会暂停执行，并通过 **SSE 全局事件** 发出 **`permission.asked`** 事件。
+2. 事件 payload 为 **PermissionRequest**：含 `id`、`sessionID`、`permission`（如 `"edit"`/`"write"`）、`patterns`、`always`（建议「始终允许」的规则）、以及可选的 `tool: { messageID, callID }`。
+3. 用户（或客户端）需要调用服务端 API 回复这次请求，可选值：
+   - **`once`**：仅批准这一次。
+   - **`always`**：批准并记住匹配的规则（本会话后续同类请求自动通过）。
+   - **`reject`**：拒绝。
+
+**当前 AIGO 的情况**：应用只通过 `client.event.subscribe()` 处理了 `message.part.updated` 和 `session.idle`，**没有监听 `permission.asked`**，也没有任何「权限确认」的 UI 或调用回复接口。因此当 OpenCode 侧配置为 `ask` 时，服务端会一直等待回复，界面上就会表现为「卡住、没法交互」。
+
+**实现「可交互」的两种方向**：
+
+| 方式 | 说明 |
+|------|------|
+| **在 AIGO 内实现权限弹窗** | 在现有 SSE 订阅里增加对 `permission.asked` 的处理；收到后在前端弹出对话框（工具名、路径/参数、once/always/reject）；用户选择后调用 **`POST /session/:id/permissions/:permissionID`**（body: `{ response: "once"\|"always"\|"reject" }`），或 SDK 中等价的 `client.session(sessionID).permissions(permissionID).respond(...)`。这样无需 MCP，即可在桌面端完成授权交互。 |
+| **MCP Bridge（如 OpenWork）** | OpenWork 作为 MCP 服务被 OpenCode 连接，由 MCP 通道把「需要批准」的请求推到桌面 UI，再通过 MCP 回复。适合需要与 OpenWork 一致架构或复用其权限 UI 时采用；实现量较大。 |
+
+**临时绕过**：若不需要在 AIGO 里点「批准」，可在 OpenCode 工作区或全局的 **opencode.json** 里把对应权限设为 `allow`（例如 `"permission": { "edit": "allow", "write": "allow" }`），写文件将不再等待用户确认，但会失去「每次确认」的安全控制。
+
+**参考**：OpenCode 文档 [Permissions](https://opencode.ai/docs/permissions/)、Server API 中的 `POST /session/:id/permissions/:permissionID`；SDK 类型 `EventPermissionAsked`、`PermissionRequest`、`PermissionRespondData`。
+
+---
+
 ## 6. OpenCode Client 使用要点小结
 
 - **创建客户端**：`createOpencodeClient({ baseUrl: "http://127.0.0.1:<port>" })`（连接已有 serve）。

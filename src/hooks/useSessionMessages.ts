@@ -104,6 +104,17 @@ function toMessageWithParts(raw: unknown): MessageWithParts | null {
   return { info, parts };
 }
 
+/** OpenCode 权限请求（SSE permission.asked 的 properties） */
+export type PermissionRequest = {
+  id: string;
+  sessionID: string;
+  permission: string;
+  patterns: string[];
+  metadata: Record<string, unknown>;
+  always: string[];
+  tool?: { messageID: string; callID: string };
+};
+
 export type MessageInfo = {
   id: string;
   sessionID: string;
@@ -173,6 +184,8 @@ export function useSessionMessages(sessionId: string | undefined) {
   const [error, setError] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [isSessionBusy, setIsSessionBusy] = useState(false);
+  /** OpenCode 权限请求（如 write/edit 为 ask 时），需用户批准后才会继续执行 */
+  const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
 
   const messagesRef = useRef<MessageWithParts[]>([]);
   const activeFetchSeqRef = useRef(0);
@@ -260,6 +273,7 @@ export function useSessionMessages(sessionId: string | undefined) {
 
   useEffect(() => {
     setSendError(null);
+    setPendingPermission(null);
     clearBusyState();
     return () => {
       if (refreshDebounceRef.current) {
@@ -317,12 +331,29 @@ export function useSessionMessages(sessionId: string | undefined) {
           properties?: {
             sessionID?: string;
             part?: { sessionID?: string };
-          };
+          } & Partial<PermissionRequest>;
         }>) {
           if (cancelled) break;
 
           const evSessionId = ev.properties?.part?.sessionID ?? ev.properties?.sessionID;
           if (evSessionId && evSessionId !== sessionIdRef.current) continue;
+          if (ev?.type === "permission.asked" && ev.properties?.sessionID === sessionIdRef.current) {
+            const req = ev.properties as PermissionRequest;
+            if (req.id && req.sessionID) {
+              setPendingPermission({
+                id: req.id,
+                sessionID: req.sessionID,
+                permission: req.permission ?? "",
+                patterns: Array.isArray(req.patterns) ? req.patterns : [],
+                metadata: req.metadata && typeof req.metadata === "object" ? req.metadata : {},
+                always: Array.isArray(req.always) ? req.always : [],
+                tool: req.tool,
+              });
+            }
+          }
+          if (ev?.type === "permission.replied" && ev.properties?.sessionID === sessionIdRef.current) {
+            setPendingPermission(null);
+          }
           if (ev?.type === "message.part.updated" || ev?.type === "session.idle") {
             triggerRefresh();
           }
@@ -487,6 +518,28 @@ export function useSessionMessages(sessionId: string | undefined) {
     }
   }, [client, sessionId, isSessionBusy, clearBusyState, fetchMessages]);
 
+  const respondToPermission = useCallback(
+    async (response: "once" | "always" | "reject"): Promise<boolean> => {
+      const req = pendingPermission;
+      if (!client || !req) return false;
+      try {
+        await client.permission.respond({
+          sessionID: req.sessionID,
+          permissionID: req.id,
+          response,
+        });
+        setPendingPermission(null);
+        void fetchMessages({ silent: true });
+        return true;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setSendError(msg || "回复权限请求失败");
+        return false;
+      }
+    },
+    [client, pendingPermission, fetchMessages]
+  );
+
   return {
     messages,
     isLoading,
@@ -496,5 +549,7 @@ export function useSessionMessages(sessionId: string | undefined) {
     refetch: fetchMessages,
     sendPrompt,
     stopSession,
+    pendingPermission,
+    respondToPermission,
   };
 }
