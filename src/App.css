@@ -61,3 +61,13 @@ body {
 *::-webkit-scrollbar-thumb:hover {
   background-color: rgba(113, 113, 122, 0.55);
 }
+
+/* Agent 思考中标签的光标闪烁效果 */
+@keyframes thinking-cursor-blink {
+  50% {
+    opacity: 0;
+  }
+}
+.thinking-cursor {
+  animation: thinking-cursor-blink 1s step-end infinite;
+}

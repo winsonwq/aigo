@@ -29,8 +29,16 @@ export function useSessions() {
         | SessionItem[]
         | { 200?: SessionItem[] }
         | undefined;
-      const list = Array.isArray(data) ? data : data?.[200];
-      setSessions(Array.isArray(list) ? list : []);
+      const rawList = Array.isArray(data) ? data : data?.[200];
+      const list = Array.isArray(rawList)
+        ? rawList.map((s: Record<string, unknown>) => ({
+            id: String(s.id ?? s.sessionID ?? ""),
+            title: typeof s.title === "string" && s.title.trim() ? s.title.trim() : "新会话",
+            slug: typeof s.slug === "string" ? s.slug : undefined,
+            time: s.time && typeof s.time === "object" ? (s.time as SessionItem["time"]) : undefined,
+          }))
+        : [];
+      setSessions(list);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg || "获取会话列表失败");

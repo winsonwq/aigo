@@ -4,6 +4,8 @@
 
 ## 快速开始
 
+**安装依赖**：本项目使用 **pnpm**。若使用 `npm i` 遇到 `Cannot read properties of null (reading 'matches')`，属 npm 已知问题，请改用 pnpm。未安装 pnpm 时可执行：`corepack enable && corepack prepare pnpm@latest --activate`（Node 自带 corepack）。镜像已在 `.npmrc` 中配置为 npmmirror。
+
 ```bash
 pnpm install
 pnpm dev          # 仅前端（Vite，http://localhost:1420）

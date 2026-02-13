@@ -4,19 +4,26 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   ArrowUp,
-  Brain,
-  ChevronDown,
-  ChevronRight,
   Loader2,
   Paperclip,
   Square,
-  Wrench,
 } from "lucide-react";
+import {
+  AssistantCollapsibleBlock,
+  getBlockLabel,
+} from "@/components/AssistantCollapsibleBlock";
+import { MessageInput, type MessageInputRef } from "@/components/MessageInput";
+import {
+  QuestionsBlock,
+  getQuestionsPayloadFromToolState,
+} from "@/components/QuestionsBlock";
+import { ThinkingBlock } from "@/components/ThinkingBlock";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ModelSelect } from "@/components/ui/model-select";
 import { useOpenCode } from "@/context/OpenCodeContext";
 import { MODEL_OPTIONS, persistDefaultModel, readDefaultModel } from "@/config/models";
+import { useSessions } from "@/hooks/useSessions";
 import {
   useSessionMessages,
   type MessageWithParts,
@@ -183,14 +190,19 @@ function buildAssistantSegments(parts: MessagePart[]): AssistantSegment[] {
   return segments;
 }
 
-/** 用户消息：独立 padding，单独成块 */
-function UserMessageBlock({ msg }: { msg: MessageWithParts }) {
-  const text = msg.parts
+function getMessageText(msg: MessageWithParts): string {
+  return msg.parts
     .filter((p): p is { type: "text"; text?: string; content?: string } => isTextPart(p))
     .map(getPartText)
-    .join("\n");
+    .join("\n")
+    .trim();
+}
+
+/** 用户消息：独立 padding，单独成块 */
+function UserMessageBlock({ msg }: { msg: MessageWithParts }) {
+  const text = getMessageText(msg);
   return (
-    <div className="user mb-3">
+    <div className="user my-5">
       <div className="w-full rounded-xl bg-zinc-200 px-3 py-2 text-base dark:bg-zinc-700/90">
         <p className="whitespace-pre-wrap">{text}</p>
       </div>
@@ -199,42 +211,41 @@ function UserMessageBlock({ msg }: { msg: MessageWithParts }) {
 }
 
 /** 助手单轮内的工具调用：每个一行气泡，可展开详情 */
-function AssistantToolCallGroup({ parts }: { parts: ToolPart[] }) {
+function AssistantToolCallGroup({
+  parts,
+  onQuestionAnswer,
+  nextUserMessageText,
+}: {
+  parts: ToolPart[];
+  onQuestionAnswer?: (answerText: string) => void;
+  nextUserMessageText?: string;
+}) {
   return (
     <div className="tool flex flex-col gap-1">
       {parts.map((part, idx) => (
-        <ToolPartBlock key={(part as { id?: string }).id ?? `tool-${idx}`} part={part} />
+        <ToolPartBlock
+          key={(part as { id?: string }).id ?? `tool-${idx}`}
+          part={part}
+          onQuestionAnswer={onQuestionAnswer}
+          nextUserMessageText={nextUserMessageText}
+        />
       ))}
     </div>
-  );
-}
-
-function ThinkingPartBlock({ part }: { part: Record<string, unknown> }) {
-  const type = String(part.type ?? "unknown");
-  const text = getObjectValue(part, ["thinking", "reasoning", "content", "text", "summary"]) ?? "";
-
-  return (
-    <details className="mt-2 rounded-lg border border-zinc-200/80 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800/70 dark:text-zinc-300" open={!!text}>
-      <summary className="flex cursor-pointer list-none items-center gap-2 py-0.5">
-        <Brain className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
-        <span className="font-medium">Thinking</span>
-        <Badge variant="secondary" className="text-[10px]">{type}</Badge>
-      </summary>
-      {text && (
-        <div className="markdown-content mt-2 text-zinc-700 dark:text-zinc-300">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
-        </div>
-      )}
-    </details>
   );
 }
 
 function MessageBubble({
   msg,
   isUser,
+  isStreaming = false,
+  onQuestionAnswer,
+  nextUserMessageText,
 }: {
   msg: MessageWithParts;
   isUser: boolean;
+  isStreaming?: boolean;
+  onQuestionAnswer?: (answerText: string) => void;
+  nextUserMessageText?: string;
 }) {
   if (isUser) {
     return <UserMessageBlock msg={msg} />;
@@ -244,7 +255,7 @@ function MessageBubble({
   const segments = buildAssistantSegments(msg.parts);
 
   return (
-    <div className="assistant mb-1 w-full text-base">
+    <div className="assistant my-4 w-full text-base">
       {segments.map((seg) => {
         if (seg.kind === "text") {
           return (
@@ -254,10 +265,17 @@ function MessageBubble({
           );
         }
         if (seg.kind === "thinking") {
-          return <ThinkingPartBlock key={seg.key} part={seg.part} />;
+          return <ThinkingBlock key={seg.key} part={seg.part} isStreaming={isStreaming} />;
         }
         if (seg.kind === "tools") {
-          return <AssistantToolCallGroup key={seg.key} parts={seg.parts} />;
+          return (
+            <AssistantToolCallGroup
+              key={seg.key}
+              parts={seg.parts}
+              onQuestionAnswer={onQuestionAnswer}
+              nextUserMessageText={nextUserMessageText}
+            />
+          );
         }
         // 未知 part 类型不直接 String()，避免 [object Object]
         const part = seg.part as Record<string, unknown>;
@@ -283,9 +301,24 @@ function MessageBubble({
   );
 }
 
-function ToolPartBlock({ part }: { part: ToolPart }) {
-  const [expanded, setExpanded] = useState(false);
+function ToolPartBlock({
+  part,
+  onQuestionAnswer,
+  nextUserMessageText,
+}: {
+  part: ToolPart;
+  onQuestionAnswer?: (answerText: string) => void;
+  nextUserMessageText?: string;
+}) {
+  const isQuestionTool = part.tool?.toLowerCase() === "question";
+  const questionsPayload = isQuestionTool
+    ? getQuestionsPayloadFromToolState(part.state ?? {})
+    : null;
+  const [expanded, setExpanded] = useState(!!questionsPayload);
   const status = part.state?.status ?? "pending";
+  const isCalling = status === "running" || status === "pending";
+  const questionAlreadyAnswered =
+    !!nextUserMessageText && nextUserMessageText.startsWith("我选择：");
   const statusLabel =
     status === "pending"
       ? "等待"
@@ -322,72 +355,87 @@ function ToolPartBlock({ part }: { part: ToolPart }) {
     ? String(part.state.error)
     : inputUrl || String(part.state?.title ?? "");
   const outputText = (part.state?.output ?? "").trim();
+  const label = getBlockLabel("Calling", "Called", isCalling);
+
+  const summarySuffix = (
+    <>
+      {status === "running" && (
+        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-zinc-400 dark:text-zinc-500" />
+      )}
+      <Badge variant={statusVariant} className="shrink-0 text-[10px]">
+        {statusLabel}
+      </Badge>
+      <span className="shrink-0 font-mono font-medium text-zinc-800 dark:text-zinc-200">
+        {part.tool}
+      </span>
+      {isSubagentCall && (
+        <span className="shrink-0 text-[10px] text-zinc-500 dark:text-zinc-400">subagent</span>
+      )}
+      {!!summaryText && (
+        <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-500 dark:text-zinc-400">
+          {summaryText}
+        </span>
+      )}
+    </>
+  );
+
+  const detailsContent =
+    questionsPayload != null ? (
+      <div className="space-y-3">
+        <QuestionsBlock
+          payload={questionsPayload}
+          onAnswerSubmit={onQuestionAnswer}
+          interactive={isCalling || status === "completed"}
+          alreadyAnswered={questionAlreadyAnswered}
+          answerText={questionAlreadyAnswered ? nextUserMessageText : undefined}
+        />
+        {part.state?.error != null && part.state.error !== "" && (
+          <p className="text-xs text-red-600 dark:text-red-400">{String(part.state.error)}</p>
+        )}
+      </div>
+    ) : hasDetails ? (
+      <div className="space-y-2 px-2 pb-2 pt-1.5">
+        {isSubagentCall && (
+          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">子代理调用详情</p>
+        )}
+        {part.state?.input && Object.keys(part.state.input).length > 0 && (
+          <div>
+            <div className="mb-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">输入</div>
+            <pre className="max-h-32 overflow-auto rounded-md bg-zinc-200/60 p-2 text-xs dark:bg-zinc-700/60">
+              {JSON.stringify(part.state.input, null, 2)}
+            </pre>
+          </div>
+        )}
+        {outputText !== "" && (
+          <div>
+            <div className="mb-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">输出</div>
+            <pre className="max-h-40 overflow-auto rounded-md bg-zinc-200/60 p-2 text-xs dark:bg-zinc-700/60">
+              {outputText}
+            </pre>
+          </div>
+        )}
+        {part.state?.error != null && part.state.error !== "" && (
+          <p className="text-xs text-red-600 dark:text-red-400">{String(part.state.error)}</p>
+        )}
+      </div>
+    ) : undefined;
 
   return (
-    <div className="tool">
-      <button
-        type="button"
-        onClick={() => setExpanded((e) => !e)}
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs"
-      >
-        <span className="shrink-0 text-zinc-500 dark:text-zinc-400">
-          {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-        </span>
-        <span className="shrink-0">
-          {status === "running" ? (
-            <Loader2 className="h-3 w-3 animate-spin text-amber-500" />
-          ) : (
-            <Wrench className="h-3 w-3 text-zinc-500 dark:text-zinc-400" />
-          )}
-        </span>
-        <span className="shrink-0 text-[11px] text-zinc-500 dark:text-zinc-400">
-          {statusLabel}
-        </span>
-        <span className="shrink-0 font-mono font-medium text-zinc-800 dark:text-zinc-200">
-          {part.tool}
-        </span>
-        {isSubagentCall && (
-          <span className="shrink-0 text-[10px] text-zinc-500 dark:text-zinc-400">subagent</span>
-        )}
-        {!!summaryText && (
-          <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-500 dark:text-zinc-400">
-            {summaryText}
-          </span>
-        )}
-      </button>
-      {expanded && hasDetails && (
-        <div className="space-y-2 border-t border-zinc-200/60 px-2 pb-2 pt-1.5 dark:border-zinc-700/60">
-          {isSubagentCall && (
-            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">子代理调用详情</p>
-          )}
-          {part.state?.input && Object.keys(part.state.input).length > 0 && (
-            <div>
-              <div className="mb-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">输入</div>
-              <pre className="max-h-32 overflow-auto rounded-md bg-zinc-200/60 p-2 text-xs dark:bg-zinc-700/60">
-                {JSON.stringify(part.state.input, null, 2)}
-              </pre>
-            </div>
-          )}
-          {outputText !== "" && (
-            <div>
-              <div className="mb-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">输出</div>
-              <pre className="max-h-40 overflow-auto rounded-md bg-zinc-200/60 p-2 text-xs dark:bg-zinc-700/60">
-                {outputText}
-              </pre>
-            </div>
-          )}
-          {part.state?.error != null && part.state.error !== "" && (
-            <p className="text-xs text-red-600 dark:text-red-400">{String(part.state.error)}</p>
-          )}
-        </div>
-      )}
-    </div>
+    <AssistantCollapsibleBlock
+      label={label}
+      open={expanded}
+      onSummaryClick={() => setExpanded((e) => !e)}
+      summarySuffix={summarySuffix}
+    >
+      {detailsContent}
+    </AssistantCollapsibleBlock>
   );
 }
 
 export function Session() {
   const { id } = useParams<{ id: string }>();
   const { status: openCodeStatus } = useOpenCode();
+  const { sessions, refetch: refetchSessions } = useSessions();
   const {
     messages,
     isLoading,
@@ -397,23 +445,30 @@ export function Session() {
     sendPrompt,
     stopSession,
   } = useSessionMessages(id);
+
+  const sessionTitle =
+    id && sessions.length > 0
+      ? sessions.find((s) => s.id === id)?.title ?? "新会话"
+      : "新会话";
   const [input, setInput] = useState("");
   const [selectedModel, setSelectedModel] = useState(() => readDefaultModel());
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const messageInputRef = useRef<MessageInputRef>(null);
 
   useEffect(() => {
     if (!scrollRef.current) return;
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages.length, isSessionBusy]);
 
-  const submitCurrentPrompt = async () => {
-    const text = input.trim();
+  const submitCurrentPrompt = async (textOverride?: string) => {
+    const text = (textOverride ?? input).trim();
     if ((!text && attachments.length === 0) || isSessionBusy || !isConnected) return;
     const attachmentContext = buildAttachmentContext(attachments);
     setInput("");
+    messageInputRef.current?.clearContent();
     const ok = await sendPrompt(text || "请结合附件进行分析。", {
       modelRaw: selectedModel,
       attachmentContext: attachmentContext || undefined,
@@ -421,13 +476,15 @@ export function Session() {
     if (ok) {
       setAttachments([]);
       setAttachmentError(null);
+      void refetchSessions();
     }
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await submitCurrentPrompt();
+    const text = messageInputRef.current?.getPlainText() ?? input;
+    await submitCurrentPrompt(text.trim() ? text : undefined);
   };
 
   const handlePickFiles = () => {
@@ -476,6 +533,11 @@ export function Session() {
 
   const isConnected = openCodeStatus === "connected";
   const groupedMessages = useMemo(() => groupMessagesByTurn(messages), [messages]);
+  const streamingMessageId = useMemo(() => {
+    const all = groupedMessages.flatMap((g) => g.assistant);
+    const last = all[all.length - 1];
+    return isSessionBusy && last ? last.info.id : null;
+  }, [groupedMessages, isSessionBusy]);
   const canSend = useMemo(() => {
     if (!isConnected || isSessionBusy) return false;
     return input.trim().length > 0 || attachments.length > 0;
@@ -490,82 +552,86 @@ export function Session() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="px-6 pb-3 pt-5">
+    <div className="relative flex h-full flex-col">
+      <div className="px-6 pb-3 pt-5 shrink-0">
         <div className="mx-auto w-full max-w-4xl">
-          <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">对话</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100 truncate" title={sessionTitle}>
+            {sessionTitle}
+          </h1>
         </div>
       </div>
       {!isConnected && (
-        <div className="px-6">
+        <div className="px-6 shrink-0">
           <p className="mx-auto mb-3 w-full max-w-4xl rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-300">
             请先连接 OpenCode（侧栏连接状态）。
           </p>
         </div>
       )}
       {error && (
-        <div className="px-6">
+        <div className="px-6 shrink-0">
           <p className="mx-auto mb-3 w-full max-w-4xl rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
             {error}
           </p>
         </div>
       )}
       {sendError && (
-        <div className="px-6">
+        <div className="px-6 shrink-0">
           <p className="mx-auto mb-3 w-full max-w-4xl rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
             {sendError}
           </p>
         </div>
       )}
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-6">
-        <div className="mx-auto w-full max-w-4xl pb-6">
+        <div className="mx-auto w-full max-w-4xl pb-[220px]">
           {isLoading && messages.length === 0 ? (
             <p className="text-sm text-zinc-500 dark:text-zinc-400">加载消息…</p>
           ) : groupedMessages.length === 0 ? (
             <p className="text-sm text-zinc-500 dark:text-zinc-400">暂无消息，在下方输入并发送开始对话。</p>
           ) : (
             <>
-              {groupedMessages.map((group) => (
-                <section key={group.id} className="mb-5">
-                  {group.user && <MessageBubble msg={group.user} isUser />}
-                  <div className="space-y-0">
-                    {group.assistant.map((msg) => (
-                      <MessageBubble key={msg.info.id} msg={msg} isUser={false} />
-                    ))}
-                  </div>
-                </section>
-              ))}
+              {groupedMessages.map((group, groupIndex) => {
+                const nextUserMessageText =
+                  groupedMessages[groupIndex + 1]?.user != null
+                    ? getMessageText(groupedMessages[groupIndex + 1].user!)
+                    : undefined;
+                return (
+                  <section key={group.id} className="mb-5">
+                    {group.user && <MessageBubble msg={group.user} isUser />}
+                    <div className="space-y-0">
+                      {group.assistant.map((msg) => (
+                        <MessageBubble
+                          key={msg.info.id}
+                          msg={msg}
+                          isUser={false}
+                          isStreaming={msg.info.id === streamingMessageId}
+                          onQuestionAnswer={sendPrompt}
+                          nextUserMessageText={nextUserMessageText}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
               {isSessionBusy && (
                 <div className="mb-3 flex justify-start">
-                  <div className="flex items-center gap-2 rounded-lg border border-zinc-200/80 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-400">
-                    <Brain className="h-3.5 w-3.5 shrink-0" />
-                    <span>Thinking…</span>
-                  </div>
+                  <span className="thinking-cursor text-zinc-500 dark:text-zinc-400">|</span>
                 </div>
               )}
             </>
           )}
         </div>
       </div>
-      <div className="pb-2 abs">
+      <div className="absolute bottom-0 left-0 right-0 px-6 pb-4">
         <form
           onSubmit={handleSubmit}
-          className="mx-auto w-full max-w-4xl rounded-2xl border border-zinc-300/90 bg-white/95 dark:border-zinc-700 dark:bg-zinc-900/95"
+          className="mx-auto w-full max-w-4xl rounded-2xl border border-zinc-300 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
         >
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                if ((e.nativeEvent as KeyboardEvent).isComposing) return;
-                e.preventDefault();
-                void submitCurrentPrompt();
-              }
-            }}
+          <MessageInput
+            ref={messageInputRef}
             placeholder="输入消息…"
             disabled={!isConnected || isSessionBusy}
-            rows={4}
-            className="min-h-[80px] w-full resize-none bg-transparent px-4 py-3 text-base text-zinc-900 placeholder:text-zinc-400 outline-none disabled:opacity-60 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+            onSubmit={(plainText) => void submitCurrentPrompt(plainText)}
+            onContentChange={(plainText) => setInput(plainText)}
           />
           {attachments.length > 0 && (
             <div className="flex flex-wrap gap-2 px-3 pb-2">

@@ -24,6 +24,7 @@ function ModelSelect({
 }) {
   const [open, setOpen] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const isTop = placement === "top";
 
   const selected = options.find((o) => o.value === value);
   const displayLabel = selected?.label ?? selected?.value ?? (value || placeholder);
@@ -63,7 +64,10 @@ function ModelSelect({
       {open && (
         <ul
           role="listbox"
-          className="absolute bottom-full left-0 z-50 mb-1 max-h-64 w-full overflow-auto rounded-md border border-zinc-200 bg-white py-1 dark:border-zinc-700 dark:bg-zinc-900"
+          className={cn(
+            "absolute left-0 z-50 max-h-64 w-full overflow-auto rounded-md border border-zinc-200 bg-white py-1 dark:border-zinc-700 dark:bg-zinc-900",
+            isTop ? "bottom-full mb-1" : "top-full mt-1"
+          )}
         >
           {options.map((opt) => (
             <li

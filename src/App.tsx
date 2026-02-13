@@ -1,5 +1,6 @@
 import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import { OpenCodeProvider } from "@/context/OpenCodeContext";
+import { ConfirmModalProvider } from "@/components/ConfirmModal";
 import { Layout } from "@/components/Layout";
 import { Home } from "@/pages/Home";
 import { Session } from "@/pages/Session";
@@ -11,7 +12,8 @@ import "./styles/markdown.css";
 function App() {
   return (
     <OpenCodeProvider>
-      <HashRouter>
+      <ConfirmModalProvider>
+        <HashRouter>
         <Routes>
           <Route element={<Layout />}>
             <Route index element={<Home />} />
@@ -22,6 +24,7 @@ function App() {
           </Route>
         </Routes>
       </HashRouter>
+      </ConfirmModalProvider>
     </OpenCodeProvider>
   );
 }
