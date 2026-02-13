@@ -56,12 +56,13 @@ export function useSessions() {
   }, [client, fetchSessions]);
 
   const createSession = useCallback(
-    async (): Promise<{ id: string } | { error: string }> => {
+    async (options?: { title?: string }): Promise<{ id: string } | { error: string }> => {
       if (!client) {
         return { error: "未连接 OpenCode" };
       }
+      const title = options?.title?.trim() || "新会话";
       try {
-        const res = await client.session.create({ title: "新会话" });
+        const res = await client.session.create({ title });
         const raw = res as {
           data?: unknown;
           error?: unknown;
@@ -116,6 +117,31 @@ export function useSessions() {
     [client, fetchSessions]
   );
 
+  /** 获取单会话详情（含 OpenCode 自动更新后的 title） */
+  const getSession = useCallback(
+    async (sessionID: string): Promise<{ title: string } | null> => {
+      if (!client || !sessionID) return null;
+      try {
+        const res = await client.session.get({ sessionID });
+        const data = (res as { data?: unknown })?.data as
+          | { title?: string }
+          | { 200?: { title?: string } }
+          | undefined;
+        const session = data && typeof data === "object"
+          ? ("title" in data ? data : (data as { 200?: { title?: string } })[200])
+          : undefined;
+        const title =
+          session && typeof session === "object" && typeof session.title === "string" && session.title.trim()
+            ? session.title.trim()
+            : "新会话";
+        return { title };
+      } catch {
+        return null;
+      }
+    },
+    [client]
+  );
+
   const deleteSession = useCallback(
     async (sessionID: string): Promise<boolean> => {
       if (!client || !sessionID) return false;
@@ -152,6 +178,7 @@ export function useSessions() {
     isLoading,
     error,
     refetch: fetchSessions,
+    getSession,
     createSession,
     deleteSession,
   };
