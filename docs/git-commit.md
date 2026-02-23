@@ -1,6 +1,6 @@
 # Git 提交规范 (Conventional Commits)
 
-**提交信息（message）使用英文**：subject、body、示例均以英文书写。
+**提交信息必须使用英文。** Commit messages (subject and body) MUST be in English. 示例见下文。
 
 - **feat**: 新功能
 - **fix**: 修复 bug

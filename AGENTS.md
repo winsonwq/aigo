@@ -32,6 +32,7 @@ AIGO：项目脚手架与协作基线，包含文档结构、提交规范与 Age
 ## 与 Agent 协作
 
 - 提交信息遵循 [docs/git-commit.md](docs/git-commit.md) 中的 Conventional Commits 规范
+- **提交信息必须使用英文**（subject、body 均以英文书写）
 - 项目说明与约定以本文件与 `docs/` 为准
 
 ## 功能完成与 AI 自测
