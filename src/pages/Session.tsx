@@ -207,7 +207,7 @@ function getMessageText(msg: MessageWithParts): string {
 function UserMessageBlock({ msg }: { msg: MessageWithParts }) {
   const text = getMessageText(msg);
   return (
-    <div className="user">
+    <div className="user my-8">
       <div className="w-full rounded-sm bg-zinc-200 px-3 py-2 text-base dark:bg-zinc-700/90">
         <p className="whitespace-pre-wrap">{text}</p>
       </div>

@@ -19,10 +19,17 @@ type WorkspaceContextValue = {
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
+/** 规范化为唯一形式，保证显示与 tooltip 一致 */
+function normalizePath(p: string | null): string | null {
+  if (p == null || typeof p !== "string") return null;
+  const trimmed = p.trim().replace(/\/+$/, "");
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 function loadStoredPath(): string | null {
   try {
     const v = localStorage.getItem(STORAGE_KEY);
-    return v && v.length > 0 ? v : null;
+    return v ? normalizePath(v) : null;
   } catch {
     return null;
   }
@@ -32,9 +39,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [workspacePath, setState] = useState<string | null>(loadStoredPath);
 
   const setWorkspacePath = useCallback((path: string | null) => {
-    setState(path);
-    if (path !== null) {
-      localStorage.setItem(STORAGE_KEY, path);
+    const normalized = normalizePath(path);
+    setState(normalized);
+    if (normalized !== null) {
+      localStorage.setItem(STORAGE_KEY, normalized);
     } else {
       localStorage.removeItem(STORAGE_KEY);
     }
@@ -45,13 +53,26 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       directory: true,
       multiple: false,
       title: "选择工作区文件夹",
+      ...(workspacePath ? { defaultPath: workspacePath } : {}),
     });
-    if (selected && typeof selected === "string") {
-      setWorkspacePath(selected);
-      return selected;
+    // 对话框可能返回 string | string[] | null（依平台/选项）
+    const raw =
+      selected == null
+        ? null
+        : Array.isArray(selected)
+          ? selected[0]
+          : typeof selected === "string"
+            ? selected
+            : null;
+    if (raw) {
+      const normalized = normalizePath(raw);
+      if (normalized !== null) {
+        setWorkspacePath(normalized);
+        return normalized;
+      }
     }
     return null;
-  }, [setWorkspacePath]);
+  }, [setWorkspacePath, workspacePath]);
 
   // Sync from storage (e.g. another tab or initial load)
   useEffect(() => {

@@ -4,7 +4,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -62,7 +61,6 @@ export function OpenCodeProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<OpenCodeStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [client, setClient] = useState<OpencodeClient | null>(null);
-  const prevWorkspacePathRef = useRef<string | null | undefined>(undefined);
 
   const disconnect = useCallback(() => {
     setClient(null);
@@ -135,27 +133,7 @@ export function OpenCodeProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅挂载时执行一次
   }, []);
 
-  // 选择工作区文件夹后若已连接，先释放端口再重连，使 OpenCode 以新工作区目录启动
-  useEffect(() => {
-    const current = workspacePath ?? null;
-    const prev = prevWorkspacePathRef.current;
-    prevWorkspacePathRef.current = current;
-    if (
-      status === "connected" &&
-      prev !== undefined &&
-      prev !== current
-    ) {
-      disconnect();
-      (async () => {
-        try {
-          await invoke("kill_process_on_port", { port: OPENCODE_PORT });
-        } catch {
-          // 忽略（如无进程或权限）
-        }
-        await connect();
-      })();
-    }
-  }, [workspacePath, status, disconnect, connect]);
+  // 工作区变更不再自动重连，避免整页出现「连接 OpenCode」loading；用户可手动重连以使用新目录
 
   // Health poll when connected; on failure set error and allow reconnect
   useEffect(() => {
