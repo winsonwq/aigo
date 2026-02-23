@@ -106,12 +106,34 @@ OpenWork 通过 **opencode-bridge** 与 OpenCode 运行时通信，采用三种�
 
 ---
 
+## 5.2 会话标题（Session Title）自动更新（类似 OpenCode CLI）
+
+OpenCode 服务端具备**会话标题自动更新**能力：在用户发送首条消息并得到 AI 回复后，会根据对话内容自动生成/更新会话标题，行为与 OpenCode CLI / TUI 一致。
+
+- **服务端 API**  
+  - `POST /session` 创建会话时，body 为 `{ parentID?, title? }`，**title 为可选**。可不传或传默认占位（如「新会话」），由服务端在首轮回复后自动更新。  
+  - `PATCH /session/:id` 可更新会话属性，body 为 `{ title? }`；通常由服务端在 summarize/首条回复后自动调用。  
+  - `GET /session/:id` 或 `session.list()` 返回的会话对象中包含最新 `title`。
+
+- **自动标题行为**  
+  - 依赖模型：Claude 系列、Grok 等会可靠地设置标题；部分模型可能不写 title（参见 [anomalyco/opencode#6819](https://github.com/anomalyco/opencode/issues/6819)）。  
+  - 1.1.2 起已修复「标题不更新」的回归；若需更稳定，可选用社区插件 [opencode-smart-title](https://github.com/Tarquinen/opencode-smart-title)。
+
+- **客户端实现建议**  
+  1. **新建会话**：不引导用户输入标题，直接 `client.session.create({ body: { title: "新会话" } })`（或省略 title），创建后跳转到 `/session/:id`，与 CLI 体验一致。  
+  2. **展示标题**：进入会话页时用 `client.session.get({ sessionID })` 取详情中的 `title`；侧栏列表使用 `session.list()` 的 `title`（已有 15s 轮询时可看到更新）。  
+  3. **及时刷新**：在 SSE 收到 **`session.idle`**（本轮回复结束）时，对该会话调用 `session.get()` 或 `refetch` 会话列表，以便侧栏和页面标题立即显示服务端更新后的 title，无需等下一次轮询。
+
+- **SSE 事件**：当前文档未明确列出 `session.updated` 事件；通过 **`session.idle`** 可知「本轮结束」，在此刻拉取会话详情或列表即可拿到最新 title。
+
+---
+
 ## 6. OpenCode Client 使用要点小结
 
 - **创建客户端**：`createOpencodeClient({ baseUrl: "http://127.0.0.1:<port>" })`（连接已有 serve）。
 - **会话**：`client.session.create()` / `client.session.get()` / 列表接口（若 SDK 暴露或直接调 `GET /session`）。
 - **发消息**：`client.session.prompt(sessionId, prompt)`（同步）；流式需配合 `client.event.subscribe()`。
-- **事件订阅**：`client.event.subscribe()` → 处理 `message.part.updated`、工具调用、会话状态等。
+- **事件订阅**：`client.event.subscribe()` → 处理 `message.part.updated`、`session.idle`、工具调用、会话状态等；在 `session.idle` 时拉取会话详情可拿到服务端自动更新后的 title（见 5.2）。
 - **健康检查**：`client.global.health()` 用于轮询与断线重连判断。
 
 官方文档：[OpenCode Server](https://opencode.ai/docs/server/)、[OpenCode SDK](https://opencode.ai/docs/sdk/)。
