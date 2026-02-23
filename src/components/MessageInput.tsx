@@ -18,6 +18,7 @@ import Mention from "@tiptap/extension-mention";
 import type { Range } from "@tiptap/core";
 import type { Editor } from "@tiptap/core";
 import type { SuggestionKeyDownProps, SuggestionProps } from "@tiptap/suggestion";
+import { SuggestionList } from "@/components/ui/suggestion-list";
 
 /** 从编辑器获取纯文本（含 @label、/label 等嵌入） */
 export function getPlainText(editor: Editor | null): string {
@@ -69,6 +70,8 @@ export type MessageInputProps = {
   onSubmit: (plainText: string) => void | Promise<void>;
   /** 用于外部判断能否发送（如 canSend） */
   onContentChange?: (plainText: string, empty: boolean) => void;
+  /** @ / 建议列表样式变体：bordered 带边框，filled 无边框仅背景 */
+  suggestionVariant?: "bordered" | "filled";
 };
 
 export type MessageInputRef = {
@@ -85,6 +88,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       disabled = false,
       onSubmit,
       onContentChange,
+      suggestionVariant = "filled",
     },
     ref
   ) {
@@ -332,10 +336,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       <div className="relative w-full">
         <EditorContent editor={editor} />
         {suggestionState.active && suggestionState.items.length > 0 && (
-          <div
-            className="absolute z-50 min-w-[160px] rounded-lg border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-800"
-            role="listbox"
-          >
+          <SuggestionList variant={suggestionVariant}>
             {suggestionState.items.map((item, i) => (
               <div
                 key={item.id}
@@ -357,7 +358,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
                 {item.label}
               </div>
             ))}
-          </div>
+          </SuggestionList>
         )}
       </div>
     );
