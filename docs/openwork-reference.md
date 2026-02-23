@@ -191,7 +191,7 @@ OpenCode 服务端具备**会话标题自动更新**能力：在用户发送首�
 5. **开发调试**  
    - **控制台位置**：若用 `pnpm tauri dev` 跑的是 Tauri 桌面窗口，必须在**应用窗口**上打开开发者工具（在窗口内右键 →「检查」/ Inspect，或菜单/快捷键），在**该窗口**的 Console 里看日志；浏览器里另开的标签页或终端的控制台都看不到应用内的 `console.log`。
    - 进入任意会话页时，控制台**一定会**出现一行 `[aigo] useSessionMessages mounted, sessionId: xxx`。若这行都没有，说明看的不是当前应用窗口的 Console。
-   - 在 **设置** 中勾选「开启消息调试」，或在地址栏加 `?debug=1`（如 `http://localhost:5173/?debug=1#/session/xxx`）后，Console 会看到：
+   - 在 **设置** 中勾选「开启消息调试」，或在地址栏加 `?debug=1`（如 `http://localhost:1420/session/xxx?debug=1`）后，Console 会看到：
      - `[aigo:messages]`：拉取消息列表 API 的原始响应、normalize 后的条数、解析后的消息角色列表（user/assistant）。若这里只有 user 没有 assistant，说明服务端 GET message 未返回回复。
      - `[aigo:sse]`：SSE 事件类型与 properties。若发送后没有任何 `message.part.updated`，说明事件流未推送或未订阅到；若有事件但 sessionID 与当前会话不一致，可能是过滤逻辑问题（已做修复：无 sessionID 时按当前会话处理）。
    - 可根据上述日志判断问题在「接口未返回 assistant」还是「SSE 未触发/被过滤」。

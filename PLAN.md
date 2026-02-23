@@ -58,7 +58,7 @@
 - [ ] 集成 **Shadcn/ui**：可后续运行 `npx shadcn@latest init` 按需添加组件；当前使用 **Tailwind 自搭** Layout/Sidebar，风格与 Shadcn 兼容。
 - [x] **根 Layout**：已实现根布局（主内容区 + 左侧固定 Sidebar）；`src/components/Layout.tsx` + `Sidebar.tsx`。
 - [x] **Sidebar 内容**：顶部标题「AIGO」；导航含 **会话**（/）、**Skills**（/skills）、**设置**（/settings）；Sessions 列表为占位，后续接 SDK。
-- [x] **路由**：已安装 **react-router-dom**，使用 **HashRouter**；路由：`/`（Home）、`/session/:id`（Session）、`/settings`、`/skills`。
+- [x] **路由**：已安装 **react-router-dom**，使用 **BrowserRouter**（History API，无 `#`）；路由：`/`（Home）、`/session/:id`（Session）、`/settings`、`/skills`。
 - [x] **Menu 与高亮**：Sidebar 使用 `NavLink`，当前路由高亮；点击跳转正常。
 - [x] **Icons**：已集成 **lucide-react**（MessageSquare、Sparkles、Settings），在 Sidebar 统一使用。
 - [x] **自测**：`pnpm lint`、`pnpm run build` 通过；Layout/Sidebar/路由在打包后正常，可本地 `pnpm tauri dev` 验证窗口与跳转。
