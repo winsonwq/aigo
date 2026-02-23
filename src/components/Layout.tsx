@@ -1,67 +1,60 @@
 import { Outlet } from "react-router-dom";
-import { useOpenCode } from "@/context/OpenCodeContext";
-import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 import { Sidebar } from "./Sidebar";
-
-function StatusBar() {
-  const { status, errorMessage, connect } = useOpenCode();
-  const isConnected = status === "connected";
-  const isConnecting = status === "connecting";
-
-  const statusLabel =
-    status === "connected"
-      ? "已连接"
-      : isConnecting
-        ? "连接中…"
-        : status === "error"
-          ? "连接异常"
-          : "未连接";
-
-  return (
-    <footer className="flex h-8 flex-shrink-0 items-center gap-2 px-3 text-[11px] text-zinc-600 dark:text-zinc-400">
-      <span
-        className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-          isConnected
-            ? "bg-emerald-500"
-            : isConnecting
-              ? "bg-amber-500"
-              : status === "error"
-                ? "bg-red-500"
-                : "bg-zinc-400"
-        }`}
-        title={statusLabel}
-      />
-      <span className="truncate" title={errorMessage ?? statusLabel}>
-        {errorMessage ?? statusLabel}
-      </span>
-      {status === "error" && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => void connect()}
-          className="ml-1 h-6 px-2 text-[11px]"
-        >
-          重试
-        </Button>
-      )}
-    </footer>
-  );
-}
+import { useOpenCode } from "@/context/OpenCodeContext";
+import { Button } from "./ui/button";
 
 export function Layout() {
+  const { status, connect } = useOpenCode();
+  const notConnected = status !== "connected";
+  const isConnecting = status === "connecting";
+
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {/* 主内容区：侧栏 + 页面 */}
-        <div className="flex min-h-0 flex-1">
-          <Sidebar />
-          <main className="min-h-0 flex-1 overflow-auto bg-transparent">
-            <Outlet />
-          </main>
-        </div>
-        <StatusBar />
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1">
+        <Sidebar />
+        <main className="flex min-h-0 flex-1 flex-col overflow-auto bg-transparent">
+          <Outlet />
+        </main>
       </div>
+      {notConnected && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/60 backdrop-blur-sm"
+          role="status"
+          aria-live="polite"
+          aria-label={isConnecting ? "正在连接 OpenCode" : "未连接 OpenCode"}
+        >
+          <div className="flex flex-col items-center gap-4">
+            {isConnecting ? (
+              <>
+                <Loader2
+                  className="h-10 w-10 shrink-0 animate-spin text-zinc-300"
+                  aria-hidden
+                />
+                <p className="text-sm font-medium text-zinc-200">
+                  正在连接 OpenCode…
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-center text-sm font-medium text-zinc-200">
+                  未连接 OpenCode
+                </p>
+                <p className="text-center text-xs text-zinc-400">
+                  请点击下方按钮连接后再使用会话与 Skills。
+                </p>
+                <Button
+                  type="button"
+                  onClick={() => void connect()}
+                  className="mt-1"
+                >
+                  连接 OpenCode
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

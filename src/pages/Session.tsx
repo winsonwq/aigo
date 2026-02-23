@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -203,8 +203,8 @@ function getMessageText(msg: MessageWithParts): string {
 function UserMessageBlock({ msg }: { msg: MessageWithParts }) {
   const text = getMessageText(msg);
   return (
-    <div className="user my-5">
-      <div className="w-full rounded-xl bg-zinc-200 px-3 py-2 text-base dark:bg-zinc-700/90">
+    <div className="user">
+      <div className="w-full rounded-sm bg-zinc-200 px-3 py-2 text-base dark:bg-zinc-700/90">
         <p className="whitespace-pre-wrap">{text}</p>
       </div>
     </div>
@@ -256,48 +256,50 @@ function MessageBubble({
   const segments = buildAssistantSegments(msg.parts);
 
   return (
-    <div className="assistant my-4 w-full text-base">
-      {segments.map((seg) => {
-        if (seg.kind === "text") {
-          return (
-            <div key={seg.key} className="markdown-content">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{seg.text}</ReactMarkdown>
-            </div>
-          );
-        }
-        if (seg.kind === "thinking") {
-          return <ThinkingBlock key={seg.key} part={seg.part} isStreaming={isStreaming} />;
-        }
-        if (seg.kind === "tools") {
-          return (
-            <AssistantToolCallGroup
-              key={seg.key}
-              parts={seg.parts}
-              onQuestionAnswer={onQuestionAnswer}
-              nextUserMessageText={nextUserMessageText}
-            />
-          );
-        }
-        // 未知 part 类型不直接 String()，避免 [object Object]
-        const part = seg.part as Record<string, unknown>;
-        const fallbackText =
-          typeof part?.content === "string"
-            ? part.content
-            : typeof part?.text === "string"
-              ? part.text
-              : null;
-        if (fallbackText) {
-          return (
-            <div key={seg.key} className="markdown-content">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{fallbackText}</ReactMarkdown>
-            </div>
-          );
-        }
-        return null;
-      })}
-      {assistantError && (
-        <p className="whitespace-pre-wrap text-red-600 dark:text-red-400">{assistantError}</p>
-      )}
+    <div className="assistant w-full text-base">
+      <div className="w-full px-3 py-2">
+        {segments.map((seg) => {
+          if (seg.kind === "text") {
+            return (
+              <div key={seg.key} className="markdown-content">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{seg.text}</ReactMarkdown>
+              </div>
+            );
+          }
+          if (seg.kind === "thinking") {
+            return <ThinkingBlock key={seg.key} part={seg.part} isStreaming={isStreaming} />;
+          }
+          if (seg.kind === "tools") {
+            return (
+              <AssistantToolCallGroup
+                key={seg.key}
+                parts={seg.parts}
+                onQuestionAnswer={onQuestionAnswer}
+                nextUserMessageText={nextUserMessageText}
+              />
+            );
+          }
+          // 未知 part 类型不直接 String()，避免 [object Object]
+          const part = seg.part as Record<string, unknown>;
+          const fallbackText =
+            typeof part?.content === "string"
+              ? part.content
+              : typeof part?.text === "string"
+                ? part.text
+                : null;
+          if (fallbackText) {
+            return (
+              <div key={seg.key} className="markdown-content">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{fallbackText}</ReactMarkdown>
+              </div>
+            );
+          }
+          return null;
+        })}
+        {assistantError && (
+          <p className="whitespace-pre-wrap text-red-600 dark:text-red-400">{assistantError}</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -433,10 +435,20 @@ function ToolPartBlock({
   );
 }
 
+export type InitialMessageState = {
+  text: string;
+  modelRaw?: string;
+  attachmentContext?: string;
+};
+
 export function Session() {
   const { id } = useParams<{ id: string }>();
-  const { status: openCodeStatus } = useOpenCode();
-  const { sessions, refetch: refetchSessions, getSession } = useSessions();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { status: openCodeStatus, client } = useOpenCode();
+  const { sessions, refetch: refetchSessions, setSessionTitle } = useSessions();
+  const initialMessageSentRef = useRef(false);
+  const state = location.state as { initialMessage?: InitialMessageState } | undefined;
   const {
     messages,
     isLoading,
@@ -449,28 +461,8 @@ export function Session() {
     respondToPermission,
   } = useSessionMessages(id);
 
-  /** 从 OpenCode 单会话详情拉取的标题（服务端会自动更新，如首条消息摘要） */
-  const [detailTitle, setDetailTitle] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!id || !getSession) {
-      setDetailTitle(null);
-      return;
-    }
-    setDetailTitle(null);
-    let cancelled = false;
-    getSession(id).then((detail) => {
-      if (!cancelled && detail) setDetailTitle(detail.title);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [id, getSession]);
-
   const sessionTitle =
-    detailTitle ??
-    (id && sessions.length > 0 ? sessions.find((s) => s.id === id)?.title : null) ??
-    "新会话";
+    (id && sessions.length > 0 ? sessions.find((s) => s.id === id)?.title : null) ?? "新会话";
   const [input, setInput] = useState("");
   const [selectedModel, setSelectedModel] = useState(() => readDefaultModel());
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -478,6 +470,43 @@ export function Session() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messageInputRef = useRef<MessageInputRef>(null);
+
+  // 从「新建会话」页带着 initialMessage 跳转过来时，在首轮拉取完成后再发送首条消息，避免被 fetchMessages 的 setMessages([]) 覆盖乐观更新
+  useEffect(() => {
+    const initial = state?.initialMessage;
+    if (
+      !id ||
+      !initial?.text?.trim() ||
+      initialMessageSentRef.current ||
+      isLoading ||
+      !client
+    ) return;
+    // 新会话首轮拉取完成后 messages 仍为空，此时再发可避免与 fetchMessages 竞态
+    if (messages.length > 0) return;
+    initialMessageSentRef.current = true;
+    (async () => {
+      void setSessionTitle(id, initial.text.trim());
+      const ok = await sendPrompt(initial.text.trim(), {
+        modelRaw: initial.modelRaw,
+        attachmentContext: initial.attachmentContext,
+      });
+      if (ok) {
+        navigate(location.pathname, { replace: true, state: {} });
+        void refetchSessions();
+      }
+    })();
+  }, [
+    id,
+    state?.initialMessage,
+    isLoading,
+    messages.length,
+    client,
+    sendPrompt,
+    setSessionTitle,
+    navigate,
+    location.pathname,
+    refetchSessions,
+  ]);
 
   useEffect(() => {
     if (!scrollRef.current) return;
@@ -487,9 +516,15 @@ export function Session() {
   const submitCurrentPrompt = async (textOverride?: string) => {
     const text = (textOverride ?? input).trim();
     if ((!text && attachments.length === 0) || isSessionBusy || !isConnected) return;
+    const isFirstMessage = messages.filter((m) => m.info.role === "user").length === 0;
     const attachmentContext = buildAttachmentContext(attachments);
     setInput("");
     messageInputRef.current?.clearContent();
+    // 首条消息时在发出请求前就更新标题，无需等 AI 回复
+    if (id && isFirstMessage) {
+      const titleText = text.trim() || "附件对话";
+      if (titleText) void setSessionTitle(id, titleText);
+    }
     const ok = await sendPrompt(text || "请结合附件进行分析。", {
       modelRaw: selectedModel,
       attachmentContext: attachmentContext || undefined,
@@ -498,12 +533,6 @@ export function Session() {
       setAttachments([]);
       setAttachmentError(null);
       void refetchSessions();
-      // OpenCode 会在首条回复后自动更新会话标题，拉取单会话详情以更新页面标题
-      if (id && getSession) {
-        getSession(id).then((detail) => {
-          if (detail) setDetailTitle(detail.title);
-        });
-      }
     }
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   };
@@ -570,10 +599,14 @@ export function Session() {
     return input.trim().length > 0 || attachments.length > 0;
   }, [attachments.length, input, isConnected, isSessionBusy]);
 
+  useEffect(() => {
+    if (!id) navigate("/", { replace: true });
+  }, [id, navigate]);
+
   if (!id) {
     return (
-      <div className="p-6">
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">缺少会话 ID，请从左侧选择会话。</p>
+      <div className="flex h-full items-center justify-center p-6">
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">跳转到新建会话…</p>
       </div>
     );
   }
@@ -587,19 +620,12 @@ export function Session() {
         />
       )}
       <div className="px-6 pb-3 pt-5 shrink-0">
-        <div className="mx-auto w-full max-w-4xl">
-          <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100 truncate" title={sessionTitle}>
+        <div className="w-full max-w-4xl">
+          <h1 className="page-header mb-0 truncate" title={sessionTitle}>
             {sessionTitle}
           </h1>
         </div>
       </div>
-      {!isConnected && (
-        <div className="px-6 shrink-0">
-          <p className="mx-auto mb-3 w-full max-w-4xl rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-300">
-            请先连接 OpenCode（侧栏连接状态）。
-          </p>
-        </div>
-      )}
       {error && (
         <div className="px-6 shrink-0">
           <p className="mx-auto mb-3 w-full max-w-4xl rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
@@ -618,7 +644,7 @@ export function Session() {
         <div className="mx-auto w-full max-w-4xl pb-[220px]">
           {isLoading && messages.length === 0 ? (
             <p className="text-sm text-zinc-500 dark:text-zinc-400">加载消息…</p>
-          ) : groupedMessages.length === 0 ? (
+          ) : groupedMessages.length === 0 && !isSessionBusy ? (
             <p className="text-sm text-zinc-500 dark:text-zinc-400">暂无消息，在下方输入并发送开始对话。</p>
           ) : (
             <>

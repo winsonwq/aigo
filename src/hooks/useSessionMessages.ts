@@ -177,7 +177,12 @@ function countConsecutiveOrphanUsers(list: MessageWithParts[]): number {
   return count;
 }
 
-export function useSessionMessages(sessionId: string | undefined) {
+export type UseSessionMessagesOptions = Record<string, never>;
+
+export function useSessionMessages(
+  sessionId: string | undefined,
+  _options?: UseSessionMessagesOptions
+) {
   const { client } = useOpenCode();
   const [messages, setMessages] = useState<MessageWithParts[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -219,6 +224,7 @@ export function useSessionMessages(sessionId: string | undefined) {
           });
         }
         setMessages([]);
+        if (!silent) setIsLoading(false);
         return [];
       }
 
@@ -267,21 +273,30 @@ export function useSessionMessages(sessionId: string | undefined) {
     [client, sessionId]
   );
 
+  // session 切换时先清空消息并设 loading，再由下方 fetchMessages 的 effect 拉取新 session 的消息（顺序需保持：先清空再拉取）
   useEffect(() => {
-    void fetchMessages();
-  }, [fetchMessages]);
-
-  useEffect(() => {
+    setMessages([]);
     setSendError(null);
     setPendingPermission(null);
     clearBusyState();
+    if (sessionId && client) {
+      setIsLoading(true);
+      setError(null);
+    } else {
+      // 无 client 或 sessionId 时立即清除 loading，避免一直显示「加载消息…」
+      setIsLoading(false);
+    }
     return () => {
       if (refreshDebounceRef.current) {
         clearTimeout(refreshDebounceRef.current);
         refreshDebounceRef.current = null;
       }
     };
-  }, [sessionId, clearBusyState]);
+  }, [sessionId, clearBusyState, client]);
+
+  useEffect(() => {
+    void fetchMessages();
+  }, [fetchMessages]);
 
   useEffect(() => {
     unmountedRef.current = false;

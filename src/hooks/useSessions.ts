@@ -9,6 +9,7 @@ export type SessionItem = {
 };
 
 const LIST_LIMIT = 50;
+const TITLE_MAX_LEN = 80;
 
 export function useSessions() {
   const { client, baseUrl } = useOpenCode();
@@ -80,7 +81,6 @@ export function useSessions() {
         const data = raw?.data;
         if (data != null && typeof data === "object") {
           const obj = data as Record<string, unknown>;
-          // SDK/服务端可能返回：Session 直接作为 data、{ 200: Session }、或 { session: Session }
           const session =
             typeof obj.id === "string"
               ? obj
@@ -95,7 +95,6 @@ export function useSessions() {
             return { id };
           }
         }
-        // 尝试从 Location 头解析（部分实现会返回 201 + Location）
         const location = raw?.response?.headers?.get?.("Location");
         if (typeof location === "string") {
           const match = /\/session\/([^/?#]+)/.exec(location);
@@ -117,29 +116,23 @@ export function useSessions() {
     [client, fetchSessions]
   );
 
-  /** 获取单会话详情（含 OpenCode 自动更新后的 title） */
-  const getSession = useCallback(
-    async (sessionID: string): Promise<{ title: string } | null> => {
-      if (!client || !sessionID) return null;
+  /**
+   * 通过 OpenCode PATCH /session/:id 设置会话标题（如将首条消息作为标题）
+   */
+  const setSessionTitle = useCallback(
+    async (sessionID: string, title: string): Promise<boolean> => {
+      if (!client || !sessionID) return false;
+      const t = typeof title === "string" && title.trim() ? title.trim().slice(0, TITLE_MAX_LEN) : "";
+      if (!t) return false;
       try {
-        const res = await client.session.get({ sessionID });
-        const data = (res as { data?: unknown })?.data as
-          | { title?: string }
-          | { 200?: { title?: string } }
-          | undefined;
-        const session = data && typeof data === "object"
-          ? ("title" in data ? data : (data as { 200?: { title?: string } })[200])
-          : undefined;
-        const title =
-          session && typeof session === "object" && typeof session.title === "string" && session.title.trim()
-            ? session.title.trim()
-            : "新会话";
-        return { title };
+        await client.session.update({ sessionID, title: t });
+        await fetchSessions();
+        return true;
       } catch {
-        return null;
+        return false;
       }
     },
-    [client]
+    [client, fetchSessions]
   );
 
   const deleteSession = useCallback(
@@ -178,7 +171,7 @@ export function useSessions() {
     isLoading,
     error,
     refetch: fetchSessions,
-    getSession,
+    setSessionTitle,
     createSession,
     deleteSession,
   };
