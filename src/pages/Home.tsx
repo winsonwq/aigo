@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowUp, Paperclip } from "lucide-react";
+import { ArrowUp, Paperclip, X } from "lucide-react";
 import { MessageInput, type MessageInputRef } from "@/components/MessageInput";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -187,9 +187,17 @@ export function Home() {
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 px-3 pb-2">
             {attachments.map((file) => (
-              <Badge key={file.id} variant="secondary" className="gap-1">
+              <Badge key={file.id} variant="secondary" className="gap-1 pr-1">
                 <span className="max-w-[180px] truncate">{file.name}</span>
                 <span className="text-[10px] opacity-70">{formatBytes(file.size)}</span>
+                <button
+                  type="button"
+                  onClick={() => setAttachments((prev) => prev.filter((a) => a.id !== file.id))}
+                  className="ml-0.5 rounded p-0.5 hover:bg-zinc-300 dark:hover:bg-zinc-600"
+                  aria-label={`移除 ${file.name}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
               </Badge>
             ))}
           </div>
