@@ -21,6 +21,7 @@ export default defineConfig(async () => ({
   server: {
     port: 1420,
     strictPort: true,
+    historyApiFallback: true,
     host: host || false,
     hmr: host
       ? {

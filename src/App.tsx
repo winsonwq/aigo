@@ -1,4 +1,4 @@
-import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { WorkspaceProvider } from "@/context/WorkspaceContext";
 import { OpenCodeProvider } from "@/context/OpenCodeContext";
 import { ConfirmModalProvider } from "@/components/ConfirmModal";
@@ -15,7 +15,7 @@ function App() {
     <WorkspaceProvider>
       <OpenCodeProvider>
       <ConfirmModalProvider>
-        <HashRouter>
+        <BrowserRouter>
         <Routes>
           <Route element={<Layout />}>
             <Route index element={<Home />} />
@@ -25,7 +25,7 @@ function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
-      </HashRouter>
+      </BrowserRouter>
       </ConfirmModalProvider>
     </OpenCodeProvider>
     </WorkspaceProvider>
