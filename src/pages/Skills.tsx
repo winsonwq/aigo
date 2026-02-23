@@ -1,4 +1,5 @@
 import { useOpenCode } from "@/context/OpenCodeContext";
+import { useWorkspace } from "@/context/WorkspaceContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useSkills } from "@/hooks/useSkills";
@@ -11,7 +12,10 @@ import { Input } from "@/components/ui/input";
 
 export function Skills() {
   const { status } = useOpenCode();
-  const { skills, isLoading, error, refetch } = useSkills();
+  const { workspacePath } = useWorkspace();
+  const { skills, isLoading, error, refetch } = useSkills(
+    workspacePath ?? undefined
+  );
   const [search, setSearch] = useState("");
   const isConnected = status === "connected";
 

@@ -27,49 +27,69 @@ fn get_platform() -> Result<serde_json::Value, String> {
 
 const DEFAULT_OPENCODE_PORT: u16 = 4096;
 
-/// Start OpenCode serve in the background. Requires `opencode` on PATH (install via brew/npm/install script).
+/// Kill any process listening on the given port. Used before restarting OpenCode with a new workspace directory.
 #[tauri::command]
-fn start_opencode_serve(port: Option<u16>) -> Result<(), String> {
+fn kill_process_on_port(port: u16) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        let status = std::process::Command::new("sh")
+            .args([
+                "-c",
+                &format!("lsof -ti :{port} 2>/dev/null | xargs kill -9 2>/dev/null; true"),
+            ])
+            .status()
+            .map_err(|e| format!("执行结束进程失败: {}", e))?;
+        if !status.success() {
+            // 可能没有进程在监听，不算错误
+        }
+        Ok(())
+    }
+    #[cfg(windows)]
+    {
+        // Windows: 根据端口找 PID 再 taskkill（可选，暂不实现则返回 Ok）
+        let _ = port;
+        Ok(())
+    }
+}
+
+/// Start OpenCode serve in the background. Requires `opencode` on PATH (install via brew/npm/install script).
+/// If `directory` is provided, the process runs with that path as current working directory (like running opencode in that folder).
+#[tauri::command]
+fn start_opencode_serve(port: Option<u16>, directory: Option<String>) -> Result<(), String> {
     let port = port.unwrap_or(DEFAULT_OPENCODE_PORT);
     let port_str = port.to_string();
-    // Allow CORS for Tauri dev (Vite) and webview so frontend can call the API
-    #[cfg(target_os = "windows")]
-    let status = std::process::Command::new("opencode")
-        .args([
-            "serve",
-            "--hostname",
-            "127.0.0.1",
-            "--port",
-            port_str.as_str(),
-            "--cors",
-            "http://localhost:1420",
-            "--cors",
-            "tauri://localhost",
-        ])
+    let args = [
+        "serve",
+        "--hostname",
+        "127.0.0.1",
+        "--port",
+        port_str.as_str(),
+        "--cors",
+        "http://localhost:1420",
+        "--cors",
+        "tauri://localhost",
+    ];
+    let mut cmd = std::process::Command::new("opencode");
+    cmd.args(&args)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn();
-    #[cfg(not(target_os = "windows"))]
-    let status = std::process::Command::new("opencode")
-        .args([
-            "serve",
-            "--hostname",
-            "127.0.0.1",
-            "--port",
-            port_str.as_str(),
-            "--cors",
-            "http://localhost:1420",
-            "--cors",
-            "tauri://localhost",
-        ])
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn();
-    match status {
+        .stderr(std::process::Stdio::null());
+    if let Some(ref dir) = directory {
+        let path = Path::new(dir);
+        if !path.exists() {
+            return Err(format!("工作区路径不存在: {}", dir));
+        }
+        if !path.is_dir() {
+            return Err(format!("工作区路径不是目录: {}", dir));
+        }
+        cmd.current_dir(path);
+    }
+    match cmd.spawn() {
         Ok(_child) => Ok(()),
-        Err(e) => Err(format!("Failed to start opencode serve: {}. Install OpenCode (e.g. brew install opencode) and ensure it is on PATH.", e)),
+        Err(e) => Err(format!(
+            "Failed to start opencode serve: {}. Install OpenCode (e.g. brew install opencode) and ensure it is on PATH.",
+            e
+        )),
     }
 }
 
@@ -226,6 +246,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             get_platform,
+            kill_process_on_port,
             start_opencode_serve,
             install_skill_from_zip,
         ])

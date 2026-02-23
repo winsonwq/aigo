@@ -20,8 +20,10 @@ import {
 import { ThinkingBlock } from "@/components/ThinkingBlock";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { WorkspaceButton } from "@/components/WorkspaceButton";
 import { ModelSelect } from "@/components/ui/model-select";
 import { useOpenCode } from "@/context/OpenCodeContext";
+import { useWorkspace } from "@/context/WorkspaceContext";
 import { persistDefaultModel, readDefaultModel } from "@/config/models";
 import { useModelOptions } from "@/hooks/useModelOptions";
 import { useSessions } from "@/hooks/useSessions";
@@ -596,6 +598,7 @@ export function Session() {
     const last = all[all.length - 1];
     return isSessionBusy && last ? last.info.id : null;
   }, [groupedMessages, isSessionBusy]);
+  const { workspacePath, openFolderPicker } = useWorkspace();
   const canSend = useMemo(() => {
     if (!isConnected || isSessionBusy) return false;
     return input.trim().length > 0 || attachments.length > 0;
@@ -716,14 +719,24 @@ export function Session() {
                 className="hidden"
                 onChange={handleFilesSelected}
               />
-              <Button type="button" size="icon" variant="ghost" onClick={handlePickFiles}>
+              <button
+                type="button"
+                onClick={handlePickFiles}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border-0 bg-zinc-100 text-zinc-900 hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700 dark:focus-visible:ring-zinc-600"
+                aria-label="添加附件"
+              >
                 <Paperclip className="h-4 w-4" />
-              </Button>
+              </button>
               <ModelSelect
                 variant="filled"
                 value={selectedModel}
                 options={modelOptions}
                 onChange={(v) => setSelectedModel(persistDefaultModel(v))}
+                disabled={isSessionBusy}
+              />
+              <WorkspaceButton
+                workspacePath={workspacePath}
+                onPick={() => void openFolderPicker()}
                 disabled={isSessionBusy}
               />
             </div>

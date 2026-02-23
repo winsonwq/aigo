@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -12,6 +13,7 @@ import {
   type OpencodeClient,
 } from "@opencode-ai/sdk/v2/client";
 import { invoke } from "@tauri-apps/api/core";
+import { useWorkspace } from "@/context/WorkspaceContext";
 
 const OPENCODE_PORT = 4096;
 const BASE_URL = `http://127.0.0.1:${OPENCODE_PORT}`;
@@ -56,9 +58,11 @@ async function checkHealth(client: OpencodeClient): Promise<HealthResult> {
 }
 
 export function OpenCodeProvider({ children }: { children: ReactNode }) {
+  const { workspacePath } = useWorkspace();
   const [status, setStatus] = useState<OpenCodeStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [client, setClient] = useState<OpencodeClient | null>(null);
+  const prevWorkspacePathRef = useRef<string | null | undefined>(undefined);
 
   const disconnect = useCallback(() => {
     setClient(null);
@@ -88,7 +92,10 @@ export function OpenCodeProvider({ children }: { children: ReactNode }) {
     };
 
     try {
-      await invoke("start_opencode_serve", { port: OPENCODE_PORT });
+      await invoke("start_opencode_serve", {
+        port: OPENCODE_PORT,
+        directory: workspacePath || undefined,
+      });
       // 轮询等待服务就绪，最多约 8 秒
       const maxAttempts = 20;
       const intervalMs = 400;
@@ -120,13 +127,35 @@ export function OpenCodeProvider({ children }: { children: ReactNode }) {
           "启动失败。请先安装 opencode（如 brew install opencode），后续版本将内置无需安装。"
       );
     }
-  }, []);
+  }, [workspacePath]);
 
   // 应用启动时自动连接，无需用户点击
   useEffect(() => {
     void connect();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅挂载时执行一次
   }, []);
+
+  // 选择工作区文件夹后若已连接，先释放端口再重连，使 OpenCode 以新工作区目录启动
+  useEffect(() => {
+    const current = workspacePath ?? null;
+    const prev = prevWorkspacePathRef.current;
+    prevWorkspacePathRef.current = current;
+    if (
+      status === "connected" &&
+      prev !== undefined &&
+      prev !== current
+    ) {
+      disconnect();
+      (async () => {
+        try {
+          await invoke("kill_process_on_port", { port: OPENCODE_PORT });
+        } catch {
+          // 忽略（如无进程或权限）
+        }
+        await connect();
+      })();
+    }
+  }, [workspacePath, status, disconnect, connect]);
 
   // Health poll when connected; on failure set error and allow reconnect
   useEffect(() => {

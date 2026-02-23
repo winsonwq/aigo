@@ -73,7 +73,7 @@ function ModelSelect({
           "flex h-8 min-w-0 items-center justify-between gap-2 rounded-md px-2.5 py-1 text-left text-xs text-zinc-900",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300",
           "disabled:cursor-not-allowed disabled:opacity-50",
-          "w-[200px] max-w-full",
+          "w-[160px] max-w-full",
           variant === "bordered" &&
             "border border-zinc-300 bg-white hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 dark:focus-visible:ring-zinc-600",
           variant === "filled" &&

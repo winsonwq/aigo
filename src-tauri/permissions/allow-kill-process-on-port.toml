@@ -1,0 +1,5 @@
+# Allow the frontend to kill process on port (e.g. before restarting OpenCode with new workspace).
+[[permission]]
+identifier = "allow-kill-process-on-port"
+description = "Enables the kill_process_on_port command to free port before reconnecting with new workspace."
+commands.allow = ["kill_process_on_port"]
