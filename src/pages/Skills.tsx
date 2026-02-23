@@ -64,17 +64,12 @@ export function Skills() {
 
   return (
     <div className="p-6">
-      <h1 className="mb-4 text-xl font-semibold text-zinc-900 dark:text-zinc-100">
+      <h1 className="page-header mb-4">
         Skills 管理
       </h1>
       <p className="mb-4 text-sm text-zinc-500 dark:text-zinc-400">
         当前会被 OpenCode 检索到的 skills（来自 .opencode/skills、.claude/skills、~/.config/opencode/skills 等）。支持从 zip 安装；zip 内需包含 SKILL.md 且含 name、description 的 YAML frontmatter。
       </p>
-      {!isConnected && (
-        <p className="mb-3 text-sm text-amber-600 dark:text-amber-400">
-          请先连接 OpenCode 以加载列表。
-        </p>
-      )}
       {error && (
         <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>
       )}
@@ -113,14 +108,14 @@ export function Skills() {
         <p className="text-sm text-zinc-500 dark:text-zinc-400">加载 Skills…</p>
       ) : skills.length === 0 ? (
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          暂无 skills，或尚未连接 OpenCode。
+          暂无 skills。
         </p>
       ) : (
         <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {filteredSkills.map((s) => (
             <Card
               key={s.name + (s.location || "")}
-              className="rounded-lg border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900"
+              className="rounded-lg border-0 bg-white dark:bg-zinc-900"
             >
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-2">
@@ -131,11 +126,6 @@ export function Skills() {
                     {s.description && (
                       <p className="mt-1 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
                         {s.description}
-                      </p>
-                    )}
-                    {s.location && (
-                      <p className="mt-1 font-mono text-xs text-zinc-500 dark:text-zinc-500">
-                        {s.location}
                       </p>
                     )}
                   </div>

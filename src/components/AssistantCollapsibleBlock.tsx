@@ -37,7 +37,7 @@ export function AssistantCollapsibleBlock({
   children,
 }: AssistantCollapsibleBlockProps) {
   return (
-    <div className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+    <div className="text-sm text-zinc-500 dark:text-zinc-400">
       <button
         type="button"
         onClick={onSummaryClick}
