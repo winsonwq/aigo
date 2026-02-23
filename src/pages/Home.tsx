@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ModelSelect } from "@/components/ui/model-select";
 import { useOpenCode } from "@/context/OpenCodeContext";
-import { MODEL_OPTIONS, persistDefaultModel, readDefaultModel } from "@/config/models";
+import { persistDefaultModel, readDefaultModel } from "@/config/models";
+import { useModelOptions } from "@/hooks/useModelOptions";
 import { useSessions } from "@/hooks/useSessions";
 
 type Attachment = {
@@ -53,6 +54,7 @@ function buildAttachmentContext(attachments: Attachment[]): string {
 export function Home() {
   const navigate = useNavigate();
   const { status } = useOpenCode();
+  const { optionsGrouped: modelOptions } = useModelOptions();
   const { createSession } = useSessions();
   const [input, setInput] = useState("");
   const [selectedModel, setSelectedModel] = useState(() => readDefaultModel());
@@ -164,13 +166,13 @@ export function Home() {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center px-6 py-8">
       {createError && (
-        <p className="mb-3 w-full max-w-2xl rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-300">
+        <p className="mb-3 w-full max-w-xl rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-300">
           {createError}
         </p>
       )}
       <form
         onSubmit={handleSubmit}
-        className="mx-auto w-full max-w-2xl rounded-2xl border border-zinc-300 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+        className="mx-auto w-full max-w-xl rounded-2xl border border-zinc-300 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
       >
         <MessageInput
           ref={messageInputRef}
@@ -205,8 +207,9 @@ export function Home() {
               <Paperclip className="h-4 w-4" />
             </Button>
             <ModelSelect
+              variant="filled"
               value={selectedModel}
-              options={MODEL_OPTIONS}
+              options={modelOptions}
               onChange={(v) => setSelectedModel(persistDefaultModel(v))}
               disabled={creating}
             />

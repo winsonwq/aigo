@@ -2,7 +2,12 @@ export const DEFAULT_MODEL_KEY = "aigo.defaultModel";
 export const FALLBACK_MODEL = "openrouter/minimax/minimax-m1";
 export const KNOWN_BAD_DEFAULTS = new Set(["openai/gpt-5.2-chat-latest"]);
 
-export const MODEL_OPTIONS = [
+export type ModelOption = { value: string; label: string };
+
+/** 分组模型选项，用于按 provider 或 free 优先等分组展示 */
+export type ModelOptionGroup = { label: string; options: ModelOption[] };
+
+export const MODEL_OPTIONS: ModelOption[] = [
   { value: "openrouter/minimax/minimax-m1", label: "MiniMax M1" },
   { value: "openrouter/minimax/minimax-m2", label: "MiniMax M2" },
   { value: "openrouter/moonshotai/kimi-k2.5", label: "Kimi K2.5" },

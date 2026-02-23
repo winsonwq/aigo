@@ -22,7 +22,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ModelSelect } from "@/components/ui/model-select";
 import { useOpenCode } from "@/context/OpenCodeContext";
-import { MODEL_OPTIONS, persistDefaultModel, readDefaultModel } from "@/config/models";
+import { persistDefaultModel, readDefaultModel } from "@/config/models";
+import { useModelOptions } from "@/hooks/useModelOptions";
 import { useSessions } from "@/hooks/useSessions";
 import {
   useSessionMessages,
@@ -222,7 +223,7 @@ function AssistantToolCallGroup({
   nextUserMessageText?: string;
 }) {
   return (
-    <div className="tool flex flex-col gap-1">
+    <div className="tool my-2 flex flex-col gap-1">
       {parts.map((part, idx) => (
         <ToolPartBlock
           key={(part as { id?: string }).id ?? `tool-${idx}`}
@@ -257,7 +258,7 @@ function MessageBubble({
 
   return (
     <div className="assistant w-full text-base">
-      <div className="w-full px-3 py-2">
+      <div className="w-full px-3 py-1">
         {segments.map((seg) => {
           if (seg.kind === "text") {
             return (
@@ -460,6 +461,7 @@ export function Session() {
     pendingPermission,
     respondToPermission,
   } = useSessionMessages(id);
+  const { optionsGrouped: modelOptions } = useModelOptions();
 
   const sessionTitle =
     (id && sessions.length > 0 ? sessions.find((s) => s.id === id)?.title : null) ?? "新会话";
@@ -620,7 +622,7 @@ export function Session() {
         />
       )}
       <div className="px-6 pb-3 pt-5 shrink-0">
-        <div className="w-full max-w-4xl">
+        <div className="w-full max-w-3xl">
           <h1 className="page-header mb-0 truncate" title={sessionTitle}>
             {sessionTitle}
           </h1>
@@ -628,20 +630,20 @@ export function Session() {
       </div>
       {error && (
         <div className="px-6 shrink-0">
-          <p className="mx-auto mb-3 w-full max-w-4xl rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
+          <p className="mx-auto mb-3 w-full max-w-3xl rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
             {error}
           </p>
         </div>
       )}
       {sendError && (
         <div className="px-6 shrink-0">
-          <p className="mx-auto mb-3 w-full max-w-4xl rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
+          <p className="mx-auto mb-3 w-full max-w-3xl rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
             {sendError}
           </p>
         </div>
       )}
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-6">
-        <div className="mx-auto w-full max-w-4xl pb-[220px]">
+        <div className="mx-auto w-full max-w-3xl pb-[220px]">
           {isLoading && messages.length === 0 ? (
             <p className="text-sm text-zinc-500 dark:text-zinc-400">加载消息…</p>
           ) : groupedMessages.length === 0 && !isSessionBusy ? (
@@ -683,7 +685,7 @@ export function Session() {
       <div className="absolute bottom-0 left-0 right-0 px-6 pb-4">
         <form
           onSubmit={handleSubmit}
-          className="mx-auto w-full max-w-4xl rounded-2xl border border-zinc-300 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+          className="mx-auto w-full max-w-3xl rounded-2xl border border-zinc-300 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
         >
           <MessageInput
             ref={messageInputRef}
@@ -718,8 +720,9 @@ export function Session() {
                 <Paperclip className="h-4 w-4" />
               </Button>
               <ModelSelect
+                variant="filled"
                 value={selectedModel}
-                options={MODEL_OPTIONS}
+                options={modelOptions}
                 onChange={(v) => setSelectedModel(persistDefaultModel(v))}
                 disabled={isSessionBusy}
               />
