@@ -138,7 +138,16 @@
 
 ---
 
-## 4. 文件与目录
+## 4. 状态管理（Redux）
+
+- **全局状态**：使用 **Redux**（@reduxjs/toolkit + react-redux）。Store 在 `src/store/index.ts`，slices 在 `src/store/slices/`。
+- **Slice 与 Thunk**：业务状态按领域拆成 slice（如 opencode、sessions、messages、workspace、modelOptions、skills）；异步与副作用用 `createAsyncThunk` 实现，在 thunk 内通过 `getState()` 取 client 等依赖。
+- **UI 消费**：组件通过 `useSelector` / `useDispatch` 读状态、派发 action；保留薄 Context 封装（如 `WorkspaceProvider`、`OpenCodeProvider`）对外提供与重构前一致的 API（如 `useWorkspace()`、`useOpenCode()`），内部从 store 读并 dispatch thunk。
+- **非序列化**：`opencode.client` 为 SDK 实例，已在 store 的 `serializableCheck.ignoredPaths` 中忽略。
+
+---
+
+## 5. 文件与目录
 
 - **路由与页面**：页面级组件放在 `src/pages/`，与路由一一对应。
 - **组件**：通用 UI 放在 `src/components/`；仅单页使用的可放在该页同目录或 `components` 子目录。
@@ -147,7 +156,7 @@
 
 ---
 
-## 5. 与本文档的同步
+## 6. 与本文档的同步
 
 - 新加通用颜色、间距、字号等时，先补全 `:root` 中的变量，再在样式中引用。
 - 重构旧样式时，逐步把硬编码色值、尺寸替换为变量，并视情况补充暗色模式变量。

@@ -1,4 +1,6 @@
+import { Provider } from "react-redux";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { store } from "@/store";
 import { WorkspaceProvider } from "@/context/WorkspaceContext";
 import { OpenCodeProvider } from "@/context/OpenCodeContext";
 import { ConfirmModalProvider } from "@/components/ConfirmModal";
@@ -12,23 +14,25 @@ import "./styles/markdown.css";
 
 function App() {
   return (
-    <WorkspaceProvider>
-      <OpenCodeProvider>
-      <ConfirmModalProvider>
-        <BrowserRouter>
-        <Routes>
-          <Route element={<Layout />}>
-            <Route index element={<Home />} />
-            <Route path="session/:id" element={<Session />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="skills" element={<Skills />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-      </ConfirmModalProvider>
-    </OpenCodeProvider>
-    </WorkspaceProvider>
+    <Provider store={store}>
+      <WorkspaceProvider>
+        <OpenCodeProvider>
+          <ConfirmModalProvider>
+            <BrowserRouter>
+              <Routes>
+                <Route element={<Layout />}>
+                  <Route index element={<Home />} />
+                  <Route path="session/:id" element={<Session />} />
+                  <Route path="settings" element={<Settings />} />
+                  <Route path="skills" element={<Skills />} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Route>
+              </Routes>
+            </BrowserRouter>
+          </ConfirmModalProvider>
+        </OpenCodeProvider>
+      </WorkspaceProvider>
+    </Provider>
   );
 }
 

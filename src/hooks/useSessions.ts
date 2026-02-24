@@ -1,176 +1,65 @@
-import { useCallback, useEffect, useState } from "react";
-import { useOpenCode } from "@/context/OpenCodeContext";
+import { useCallback } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import type { AppDispatch, RootState } from "@/store";
+import {
+  fetchSessions,
+  createSession as createSessionThunk,
+  deleteSession as deleteSessionThunk,
+  setSessionTitle as setSessionTitleThunk,
+  type SessionItem,
+} from "@/store/slices/sessionsSlice";
 
-export type SessionItem = {
-  id: string;
-  title: string;
-  slug?: string;
-  time?: { created: number; updated: number };
-};
-
-const LIST_LIMIT = 50;
-const TITLE_MAX_LEN = 80;
+export type { SessionItem };
 
 export function useSessions() {
-  const { client, baseUrl } = useOpenCode();
-  const [sessions, setSessions] = useState<SessionItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const dispatch = useDispatch<AppDispatch>();
+  const sessions = useSelector((s: RootState) => s.sessions.sessions);
+  const isLoading = useSelector((s: RootState) => s.sessions.isLoading);
+  const error = useSelector((s: RootState) => s.sessions.error);
 
-  const fetchSessions = useCallback(async () => {
-    if (!client) {
-      setSessions([]);
-      return;
-    }
-    setIsLoading(true);
-    setError(null);
-    try {
-      const res = await client.session.list({ limit: LIST_LIMIT });
-      const data = res?.data as
-        | SessionItem[]
-        | { 200?: SessionItem[] }
-        | undefined;
-      const rawList = Array.isArray(data) ? data : data?.[200];
-      const list = Array.isArray(rawList)
-        ? rawList.map((s: Record<string, unknown>) => ({
-            id: String(s.id ?? s.sessionID ?? ""),
-            title: typeof s.title === "string" && s.title.trim() ? s.title.trim() : "新会话",
-            slug: typeof s.slug === "string" ? s.slug : undefined,
-            time: s.time && typeof s.time === "object" ? (s.time as SessionItem["time"]) : undefined,
-          }))
-        : [];
-      setSessions(list);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg || "获取会话列表失败");
-      setSessions([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [client]);
-
-  useEffect(() => {
-    void fetchSessions();
-    if (!client) return;
-    const id = setInterval(fetchSessions, 15_000);
-    return () => clearInterval(id);
-  }, [client, fetchSessions]);
+  const refetch = useCallback(() => {
+    void dispatch(fetchSessions());
+  }, [dispatch]);
 
   const createSession = useCallback(
-    async (options?: { title?: string }): Promise<{ id: string } | { error: string }> => {
-      if (!client) {
-        return { error: "未连接 OpenCode" };
+    async (options?: { title?: string }): Promise<
+      { id: string } | { error: string }
+    > => {
+      const result = await dispatch(createSessionThunk(options ?? {}));
+      if (createSessionThunk.fulfilled.match(result)) {
+        return { id: result.payload.id };
       }
-      const title = options?.title?.trim() || "新会话";
-      try {
-        const res = await client.session.create({ title });
-        const raw = res as {
-          data?: unknown;
-          error?: unknown;
-          response?: { ok?: boolean; headers?: Headers };
-          [k: string]: unknown;
-        };
-        if (raw?.error) {
-          const err = raw.error as Record<string, unknown>;
-          const msg =
-            (err?.message as string) ||
-            (err?.detail as string) ||
-            (typeof raw.error === "string" ? raw.error : "创建失败");
-          return { error: msg };
-        }
-        const data = raw?.data;
-        if (data != null && typeof data === "object") {
-          const obj = data as Record<string, unknown>;
-          const session =
-            typeof obj.id === "string"
-              ? obj
-              : (obj[200] as Record<string, unknown> | undefined) ??
-                (obj.session as Record<string, unknown> | undefined);
-          const id =
-            session && typeof session === "object"
-              ? (session.id as string) ?? (session.sessionID as string)
-              : null;
-          if (typeof id === "string" && id.length > 0) {
-            await fetchSessions();
-            return { id };
-          }
-        }
-        const location = raw?.response?.headers?.get?.("Location");
-        if (typeof location === "string") {
-          const match = /\/session\/([^/?#]+)/.exec(location);
-          if (match?.[1]) {
-            await fetchSessions();
-            return { id: match[1] };
-          }
-        }
-        return { error: "服务端返回格式异常，无法解析会话 ID" };
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        return {
-          error:
-            msg ||
-            "创建会话失败，请检查 OpenCode 连接或重试。",
-        };
-      }
+      return {
+        error:
+          result.payload ?? "创建会话失败，请检查 OpenCode 连接或重试。",
+      };
     },
-    [client, fetchSessions]
+    [dispatch]
   );
 
-  /**
-   * 通过 OpenCode PATCH /session/:id 设置会话标题（如将首条消息作为标题）
-   */
   const setSessionTitle = useCallback(
     async (sessionID: string, title: string): Promise<boolean> => {
-      if (!client || !sessionID) return false;
-      const t = typeof title === "string" && title.trim() ? title.trim().slice(0, TITLE_MAX_LEN) : "";
-      if (!t) return false;
-      try {
-        await client.session.update({ sessionID, title: t });
-        await fetchSessions();
-        return true;
-      } catch {
-        return false;
-      }
+      const result = await dispatch(
+        setSessionTitleThunk({ sessionID, title })
+      );
+      return setSessionTitleThunk.fulfilled.match(result);
     },
-    [client, fetchSessions]
+    [dispatch]
   );
 
   const deleteSession = useCallback(
     async (sessionID: string): Promise<boolean> => {
-      if (!client || !sessionID) return false;
-      try {
-        const api = client.session as unknown as {
-          delete?: (args: { sessionID: string } | { id: string }) => Promise<unknown>;
-        };
-        if (typeof api.delete === "function") {
-          try {
-            await api.delete({ sessionID });
-          } catch {
-            await api.delete({ id: sessionID });
-          }
-        } else {
-          const res = await fetch(
-            `${baseUrl}/session/${encodeURIComponent(sessionID)}`,
-            { method: "DELETE" }
-          );
-          if (!res.ok) {
-            throw new Error(`删除会话失败: ${res.status}`);
-          }
-        }
-        await fetchSessions();
-        return true;
-      } catch {
-        return false;
-      }
+      const result = await dispatch(deleteSessionThunk(sessionID));
+      return deleteSessionThunk.fulfilled.match(result);
     },
-    [client, baseUrl, fetchSessions]
+    [dispatch]
   );
 
   return {
     sessions,
     isLoading,
     error,
-    refetch: fetchSessions,
+    refetch,
     setSessionTitle,
     createSession,
     deleteSession,
