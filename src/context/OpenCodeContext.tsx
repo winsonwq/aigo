@@ -14,11 +14,12 @@ import {
   startHealthPoll,
   OPENCODE_BASE_URL,
   type OpenCodeStatus,
+  type OpenCodeEngineSource,
 } from "@/store/slices/opencodeSlice";
 import { fetchSessions } from "@/store/slices/sessionsSlice";
 import type { AppDispatch, RootState } from "@/store";
 
-export type { OpenCodeStatus };
+export type { OpenCodeStatus, OpenCodeEngineSource };
 
 export const OPENCODE_PORT = 4096;
 
@@ -26,6 +27,8 @@ type OpenCodeContextValue = {
   status: OpenCodeStatus;
   errorMessage: string | null;
   client: OpencodeClient | null;
+  /** "sidecar" = 内置 OpenCode，"path" = 本机 PATH */
+  engineSource: OpenCodeEngineSource | null;
   baseUrl: string;
   connect: () => Promise<void>;
   disconnect: () => void;
@@ -37,18 +40,26 @@ function useOpenCodeState() {
   const status = useSelector((s: RootState) => s.opencode.status);
   const errorMessage = useSelector((s: RootState) => s.opencode.errorMessage);
   const client = useSelector((s: RootState) => s.opencode.client);
-  return { status, errorMessage, client };
+  const engineSource = useSelector((s: RootState) => s.opencode.engineSource);
+  return { status, errorMessage, client, engineSource };
 }
 
 export function OpenCodeProvider({ children }: { children: ReactNode }) {
   const dispatch = useDispatch<AppDispatch>();
   const { workspacePath } = useWorkspace();
-  const { status, errorMessage, client } = useOpenCodeState();
+  const { status, errorMessage, client, engineSource } = useOpenCodeState();
 
   useEffect(() => {
+    dispatch(disconnectOpencode());
     void dispatch(connectOpencode(workspacePath ?? undefined));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on mount
-  }, []);
+  }, [workspacePath, dispatch]);
+
+  // 保持 status 与 client 一致：若显示已连接但 client 为空（异常状态），则置为未连接
+  useEffect(() => {
+    if (status === "connected" && client === null) {
+      dispatch(disconnectOpencode());
+    }
+  }, [status, client, dispatch]);
 
   useEffect(() => {
     if (status === "connected" && client) {
@@ -75,6 +86,7 @@ export function OpenCodeProvider({ children }: { children: ReactNode }) {
     status,
     errorMessage,
     client,
+    engineSource,
     baseUrl: OPENCODE_BASE_URL,
     connect,
     disconnect,

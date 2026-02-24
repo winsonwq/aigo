@@ -19,6 +19,7 @@ export const store = configureStore({
     getDefaultMiddleware({
       serializableCheck: {
         ignoredPaths: ["opencode.client"],
+        ignoredActionPaths: ["payload.client"],
       },
     }),
 });

@@ -10,13 +10,17 @@ import { useSessions, type SessionItem } from "@/hooks/useSessions";
 import { cn } from "@/lib/utils";
 
 function SidebarStatusBar() {
-  const { status, errorMessage, connect } = useOpenCode();
+  const { status, errorMessage, connect, engineSource } = useOpenCode();
   const isConnected = status === "connected";
   const isConnecting = status === "connecting";
 
   const statusLabel =
     status === "connected"
-      ? "已连接"
+      ? engineSource === "sidecar"
+        ? "已连接（内置）"
+        : engineSource === "path"
+          ? "已连接（本机）"
+          : "已连接"
       : isConnecting
         ? "连接中…"
         : status === "error"
@@ -63,7 +67,13 @@ const NAV_ITEMS = [
 
 function SidebarHeader() {
   return (
-    <div className="flex h-14 shrink-0 items-center px-4">
+    <div className="flex h-14 shrink-0 items-center gap-2.5 px-4">
+      <img
+        src="/aigo-logo.svg"
+        alt=""
+        className="h-8 w-8 shrink-0 rounded-md object-contain"
+        aria-hidden
+      />
       <span className="text-sm font-semibold tracking-wide text-zinc-900 dark:text-zinc-100">
         AIGO
       </span>

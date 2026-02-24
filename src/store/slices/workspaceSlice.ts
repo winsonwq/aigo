@@ -1,36 +1,15 @@
 import { createSlice, createAsyncThunk, type PayloadAction } from "@reduxjs/toolkit";
-import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
-
-const STORAGE_KEY = "aigo_workspace_path";
 
 function normalizePath(p: string | null): string | null {
   if (p == null || typeof p !== "string") return null;
-  const trimmed = p.trim().replace(/\/+$/, "");
-  return trimmed.length > 0 ? trimmed : null;
+  let s = p.trim();
+  if (s.startsWith("file://")) s = s.slice(7);
+  s = s.replace(/\/+$/, "");
+  return s.length > 0 ? s : null;
 }
 
-export function loadStoredWorkspacePath(): string | null {
-  try {
-    const v = localStorage.getItem(STORAGE_KEY);
-    return v ? normalizePath(v) : null;
-  } catch {
-    return null;
-  }
-}
-
-function persistWorkspacePath(path: string | null) {
-  try {
-    if (path !== null) {
-      localStorage.setItem(STORAGE_KEY, path);
-    } else {
-      localStorage.removeItem(STORAGE_KEY);
-    }
-  } catch {
-    // ignore
-  }
-}
-
+/** 选文件夹：Rust 端已持久化到本地文件，前端只更新 store。 */
 export const openFolderPicker = createAsyncThunk<
   string | null,
   void,
@@ -39,40 +18,36 @@ export const openFolderPicker = createAsyncThunk<
   "workspace/openFolderPicker",
   async (_, { getState, dispatch, rejectWithValue }) => {
     const state = getState() as { workspace?: { workspacePath: string | null } };
-    const workspacePath = state.workspace?.workspacePath ?? null;
-    const defaultPath = workspacePath
-      ? workspacePath
-      : (await invoke<string>("get_home_dir").catch(() => null)) ?? undefined;
-    const selected = await open({
-      directory: true,
-      multiple: false,
-      title: "选择工作区文件夹",
-      ...(defaultPath ? { defaultPath } : {}),
-    });
-    const raw =
-      selected == null
-        ? null
-        : Array.isArray(selected)
-          ? selected[0]
-          : typeof selected === "string"
-            ? selected
-            : null;
-    if (!raw) return rejectWithValue(null);
+    const defaultPath = state.workspace?.workspacePath ?? null;
+    let raw: string | null = null;
+    try {
+      const result = await invoke<string | null>("pick_workspace_folder", {
+        default_path: defaultPath ?? undefined,
+      });
+      raw = result != null && typeof result === "string" ? result : null;
+    } catch (e) {
+      console.error("[workspace] openFolderPicker failed:", e);
+      return rejectWithValue(null);
+    }
+    if (raw === null || raw === undefined) return rejectWithValue(null);
     const normalized = normalizePath(raw);
     if (normalized === null) return rejectWithValue(null);
     dispatch(workspaceSlice.actions.setWorkspacePath(normalized));
-    persistWorkspacePath(normalized);
     return normalized;
   }
 );
 
-/** Dispatch this thunk to set path and persist to localStorage. */
+/** 设置路径并持久化到 Rust 端本地文件（不依赖 localStorage）。 */
 export const setWorkspacePathThunk = createAsyncThunk(
   "workspace/setPath",
   async (path: string | null, { dispatch }) => {
     const normalized = normalizePath(path);
+    try {
+      await invoke("save_workspace_path", { path: normalized });
+    } catch {
+      // 非 Tauri 环境忽略
+    }
     dispatch(workspaceSlice.actions.setWorkspacePath(normalized));
-    persistWorkspacePath(normalized);
   }
 );
 
@@ -81,7 +56,7 @@ type WorkspaceState = {
 };
 
 const initialState: WorkspaceState = {
-  workspacePath: loadStoredWorkspacePath(),
+  workspacePath: null,
 };
 
 export const workspaceSlice = createSlice({
@@ -91,5 +66,12 @@ export const workspaceSlice = createSlice({
     setWorkspacePath(state, action: PayloadAction<string | null>) {
       state.workspacePath = normalizePath(action.payload);
     },
+  },
+  extraReducers(builder) {
+    builder.addCase(openFolderPicker.fulfilled, (state, action) => {
+      if (action.payload != null) {
+        state.workspacePath = normalizePath(action.payload);
+      }
+    });
   },
 });

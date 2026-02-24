@@ -230,7 +230,6 @@ export function Home() {
               disabled={creating}
             />
             <WorkspaceButton
-              workspacePath={workspacePath}
               onPick={() => void openFolderPicker()}
               disabled={creating}
             />

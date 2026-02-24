@@ -449,7 +449,7 @@ export function Session() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const navigate = useNavigate();
-  const { status: openCodeStatus, client } = useOpenCode();
+  const { status: openCodeStatus, client, disconnect } = useOpenCode();
   const { sessions, refetch: refetchSessions, setSessionTitle } = useSessions();
   const initialMessageSentRef = useRef(false);
   const state = location.state as { initialMessage?: InitialMessageState } | undefined;
@@ -609,6 +609,13 @@ export function Session() {
     if (!id) navigate("/", { replace: true });
   }, [id, navigate]);
 
+  // 当出现「未连接或缺少 sessionId」且实际 client 为空时，同步为未连接状态，避免左下角仍显示「已连接」但菜单/会话无法操作
+  useEffect(() => {
+    if (error === "未连接或缺少 sessionId" && client === null) {
+      disconnect();
+    }
+  }, [error, client, disconnect]);
+
   if (!id) {
     return (
       <div className="flex h-full items-center justify-center p-6">
@@ -744,7 +751,6 @@ export function Session() {
                 disabled={isSessionBusy}
               />
               <WorkspaceButton
-                workspacePath={workspacePath}
                 onPick={() => void openFolderPicker()}
                 disabled={isSessionBusy}
               />

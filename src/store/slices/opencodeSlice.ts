@@ -61,19 +61,24 @@ function stopHealthPoll() {
 }
 
 export const connectOpencode = createAsyncThunk<
-  { client: OpencodeClient },
+  { client: OpencodeClient; source: string },
   string | undefined,
   { rejectValue: string }
 >(
   "opencode/connect",
   async (workspacePath, { rejectWithValue }) => {
+    console.log("[OpenCode] Connecting…", { workspacePath: workspacePath ?? "(default)" });
+    let source = "path";
     try {
-      await invoke("start_opencode_serve", {
+      await invoke("kill_process_on_port", { port: OPENCODE_PORT });
+      source = (await invoke("start_opencode_serve", {
         port: OPENCODE_PORT,
         directory: workspacePath || undefined,
-      });
+      })) as string;
+      console.log("[OpenCode] start_opencode_serve ok (" + source + "), polling health…");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      console.error("[OpenCode] start_opencode_serve failed:", msg);
       return rejectWithValue(
         msg ||
           "启动失败。请先安装 opencode（如 brew install opencode），后续版本将内置无需安装。"
@@ -85,9 +90,13 @@ export const connectOpencode = createAsyncThunk<
     for (let i = 0; i < maxAttempts; i++) {
       await new Promise((r) => setTimeout(r, intervalMs));
       const result = await tryConnect();
-      if ("client" in result) return result;
+      if ("client" in result) {
+        console.log("[OpenCode] Connected (" + source + ").");
+        return { client: result.client, source };
+      }
       lastError = result.error;
     }
+    console.error("[OpenCode] Health check failed after retries:", lastError);
     return rejectWithValue(
       "无法连接 OpenCode（" +
         lastError +
@@ -104,16 +113,21 @@ export const disconnectOpencode = createAsyncThunk(
   }
 );
 
+export type OpenCodeEngineSource = "sidecar" | "path";
+
 type OpenCodeState = {
   status: OpenCodeStatus;
   errorMessage: string | null;
   client: OpencodeClient | null;
+  /** "sidecar" = 内置打包的 OpenCode，"path" = 本机 PATH 上的 opencode */
+  engineSource: OpenCodeEngineSource | null;
 };
 
 const initialState: OpenCodeState = {
   status: "idle",
   errorMessage: null,
   client: null,
+  engineSource: null,
 };
 
 export const opencodeSlice = createSlice({
@@ -124,6 +138,7 @@ export const opencodeSlice = createSlice({
       state.status = "idle";
       state.errorMessage = null;
       state.client = null;
+      state.engineSource = null;
     },
   },
   extraReducers(builder) {
@@ -134,9 +149,11 @@ export const opencodeSlice = createSlice({
       })
       .addCase(
         connectOpencode.fulfilled,
-        (state, action: PayloadAction<{ client: OpencodeClient }>) => {
+        (state, action: PayloadAction<{ client: OpencodeClient; source: string }>) => {
           state.status = "connected";
           state.client = action.payload.client;
+          state.engineSource =
+            action.payload.source === "sidecar" ? "sidecar" : "path";
         }
       )
       .addCase(connectOpencode.rejected, (state, action) => {
