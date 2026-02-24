@@ -18,6 +18,8 @@ Thumbs.db
 dist/
 dist-ssr
 build/
+src-tauri/binaries/
+src-tauri/target/
 *.log
 node_modules
 .pnpm-store/

@@ -1,0 +1,5 @@
+# Allow the frontend to open native folder picker and get selected path.
+[[permission]]
+identifier = "allow-pick-workspace-folder"
+description = "Enables the pick_workspace_folder command to open folder picker and return the selected path."
+commands.allow = ["pick_workspace_folder"]

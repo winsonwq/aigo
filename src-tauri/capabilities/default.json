@@ -10,8 +10,20 @@
     "dialog:default",
     "allow-get-platform",
     "allow-get-home-dir",
+    "allow-pick-workspace-folder",
+    "allow-workspace-path",
     "allow-kill-process-on-port",
     "allow-start-opencode-serve",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "binaries/opencode",
+          "sidecar": true,
+          "args": true
+        }
+      ]
+    },
     "core:window:default",
     "core:window:allow-start-dragging",
     "core:window:allow-close",

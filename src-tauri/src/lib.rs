@@ -1,7 +1,11 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 use std::fs;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use tauri::Manager;
+use tauri::menu::{Menu, SubmenuBuilder};
+use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_shell::ShellExt;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -38,6 +42,72 @@ fn get_home_dir() -> Result<String, String> {
     {
         std::env::var("USERPROFILE").map_err(|_| "USERPROFILE not set".to_string())
     }
+}
+
+const WORKSPACE_PATH_FILENAME: &str = "workspace_path.txt";
+
+fn workspace_path_file() -> Result<PathBuf, String> {
+    let dir = dirs::config_dir().ok_or("无法获取配置目录")?;
+    Ok(dir.join("aigo").join(WORKSPACE_PATH_FILENAME))
+}
+
+/// 将工作区路径持久化到本地文件（不依赖 WebView localStorage，避免被覆盖）。
+fn write_workspace_path(path: Option<&str>) -> Result<(), String> {
+    let file_path = workspace_path_file()?;
+    if let Some(p) = path {
+        if let Some(parent) = file_path.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        fs::write(&file_path, p).map_err(|e| e.to_string())?;
+    } else if file_path.exists() {
+        let _ = fs::remove_file(&file_path);
+    }
+    Ok(())
+}
+
+/// 从本地文件读取工作区路径（应用启动时由前端调用，作为唯一持久化来源）。
+#[tauri::command]
+fn read_workspace_path() -> Result<Option<String>, String> {
+    let file_path = workspace_path_file()?;
+    if !file_path.is_file() {
+        return Ok(None);
+    }
+    let s = fs::read_to_string(&file_path).map_err(|e| e.to_string())?;
+    let trimmed = s.trim();
+    Ok(if trimmed.is_empty() { None } else { Some(trimmed.to_string()) })
+}
+
+/// 保存工作区路径到本地文件（供前端显式设置时调用）。
+#[tauri::command]
+fn save_workspace_path(path: Option<String>) -> Result<(), String> {
+    write_workspace_path(path.as_deref())
+}
+
+/// Opens native folder picker. Optional default_path: open dialog in this directory so "打开的位置" matches displayed path.
+/// Persists to local file; on write error we still return the path so frontend can update.
+#[tauri::command]
+async fn pick_workspace_folder(
+    app: tauri::AppHandle,
+    default_path: Option<String>,
+) -> Result<Option<String>, String> {
+    let mut builder = app.dialog().file().set_title("选择工作区文件夹");
+    if let Some(ref p) = default_path {
+        let trimmed = p.trim();
+        if !trimmed.is_empty() {
+            builder = builder.set_directory(trimmed);
+        }
+    }
+    let path = builder.blocking_pick_folder();
+    let Some(fp) = path else {
+        return Ok(None);
+    };
+    let path_buf = fp.into_path().map_err(|e| e.to_string())?;
+    let canonical = path_buf.canonicalize().map_err(|e| e.to_string())?;
+    let path_str = canonical.to_string_lossy().into_owned();
+    if let Err(e) = write_workspace_path(Some(&path_str)) {
+        eprintln!("[pick_workspace_folder] write_workspace_path failed: {}", e);
+    }
+    Ok(Some(path_str))
 }
 
 /// Resolve directory to an absolute path; if None or empty or "~", use home dir.
@@ -77,13 +147,105 @@ fn kill_process_on_port(port: u16) -> Result<(), String> {
     }
 }
 
-/// Start OpenCode serve in the background. Requires `opencode` on PATH (install via brew/npm/install script).
-/// If `directory` is provided, the process runs with that path as current working directory (like running opencode in that folder).
-/// When directory is None or empty, the user's home directory (~) is used as default.
+/// Run shell with login profile to get user's PATH, then `which <name>` and return first line of stdout if success.
+#[cfg(unix)]
+fn which_via_login_shell(name: &str) -> Option<PathBuf> {
+    let shell = std::env::var("SHELL").ok().filter(|s| !s.is_empty());
+    let shell = shell.as_deref().unwrap_or("/bin/zsh");
+    let output = std::process::Command::new(shell)
+        .args(["-lc", &format!("which {name} 2>/dev/null")])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let line = std::str::from_utf8(&output.stdout).ok()?.lines().next()?.trim();
+    if line.is_empty() {
+        return None;
+    }
+    let path = PathBuf::from(line);
+    if path.is_file() {
+        Some(path)
+    } else {
+        None
+    }
+}
+
+#[cfg(windows)]
+fn which_via_login_shell(_name: &str) -> Option<PathBuf> {
+    None
+}
+
+/// Search for opencode binary in PATH and common install locations.
+/// Packaged apps (e.g. macOS .app) often have minimal PATH and miss /opt/homebrew/bin, /usr/local/bin.
+fn find_opencode_binary() -> PathBuf {
+    let name = if cfg!(windows) { "opencode.exe" } else { "opencode" };
+
+    // 1. Try env PATH (may be limited when launched from .app)
+    if let Ok(path_var) = std::env::var("PATH") {
+        for dir in std::env::split_paths(&path_var) {
+            let candidate = dir.join(name);
+            if candidate.is_file() {
+                return candidate;
+            }
+        }
+    }
+
+    // 2. Common install paths (no PATH needed when launched from .app / packaged)
+    #[cfg(target_os = "macos")]
+    let extra_dirs: &[&str] = &["/opt/homebrew/bin", "/usr/local/bin"];
+    #[cfg(target_os = "linux")]
+    let extra_dirs: &[&str] = &["/usr/local/bin", "/usr/bin"];
+    #[cfg(windows)]
+    let extra_dirs: &[&str] = &[];
+
+    #[cfg(unix)]
+    for dir in extra_dirs {
+        let candidate = PathBuf::from(dir).join(name);
+        if candidate.is_file() {
+            return candidate;
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    if let Ok(home) = std::env::var("HOME") {
+        let candidate = PathBuf::from(&home).join(".local/bin").join(name);
+        if candidate.is_file() {
+            return candidate;
+        }
+    }
+
+    // 3. Use login shell's PATH (e.g. from ~/.zprofile) so we find opencode when launched from .app
+    if let Some(path) = which_via_login_shell(name) {
+        return path;
+    }
+
+    // Fallback: use name only (fails in .app when PATH is empty)
+    PathBuf::from(name)
+}
+
+/// Start OpenCode serve in the background. Prefers bundled sidecar (binaries/opencode); falls back to PATH or common install paths.
+/// Returns "sidecar" if the bundled binary was used, "path" if the system opencode was used.
 #[tauri::command]
-fn start_opencode_serve(port: Option<u16>, directory: Option<String>) -> Result<(), String> {
+fn start_opencode_serve(
+    app: tauri::AppHandle,
+    port: Option<u16>,
+    directory: Option<String>,
+) -> Result<String, String> {
     let port = port.unwrap_or(DEFAULT_OPENCODE_PORT);
     let port_str = port.to_string();
+    let resolved = resolve_workspace_dir(directory)?;
+    if let Some(ref path_buf) = resolved {
+        let path = path_buf.as_path();
+        if !path.exists() {
+            return Err(format!("工作区路径不存在: {}", path.display()));
+        }
+        if !path.is_dir() {
+            return Err(format!("工作区路径不是目录: {}", path.display()));
+        }
+    }
+
+    // CORS: dev uses localhost:1420; production webview may use tauri://localhost or https://asset.localhost
     let args = [
         "serve",
         "--hostname",
@@ -94,27 +256,44 @@ fn start_opencode_serve(port: Option<u16>, directory: Option<String>) -> Result<
         "http://localhost:1420",
         "--cors",
         "tauri://localhost",
+        "--cors",
+        "https://asset.localhost",
     ];
-    let mut cmd = std::process::Command::new("opencode");
+
+    // 1. Prefer bundled sidecar (user downloads app = app includes opencode)
+    if let Ok(sidecar) = app.shell().sidecar("opencode") {
+        let mut sidecar_cmd = sidecar.args(&args);
+        if let Some(ref path_buf) = resolved {
+            sidecar_cmd = sidecar_cmd.current_dir(path_buf.as_path());
+        }
+        match sidecar_cmd.spawn() {
+            Ok((_rx, child)) => {
+                std::mem::forget(child);
+                return Ok("sidecar".to_string());
+            }
+            Err(e) => {
+                return Err(format!(
+                    "Failed to start bundled OpenCode: {}. Restart the app or reinstall.",
+                    e
+                ));
+            }
+        }
+    }
+
+    // 2. Fallback: opencode on PATH or in common install paths (dev / no sidecar)
+    let opencode_bin = find_opencode_binary();
+    let mut cmd = std::process::Command::new(&opencode_bin);
     cmd.args(&args)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
-    let resolved = resolve_workspace_dir(directory)?;
-    if let Some(path_buf) = resolved {
-        let path = path_buf.as_path();
-        if !path.exists() {
-            return Err(format!("工作区路径不存在: {}", path.display()));
-        }
-        if !path.is_dir() {
-            return Err(format!("工作区路径不是目录: {}", path.display()));
-        }
-        cmd.current_dir(path);
+    if let Some(ref path_buf) = resolved {
+        cmd.current_dir(path_buf.as_path());
     }
     match cmd.spawn() {
-        Ok(_child) => Ok(()),
+        Ok(_child) => Ok("path".to_string()),
         Err(e) => Err(format!(
-            "Failed to start opencode serve: {}. Install OpenCode (e.g. brew install opencode) and ensure it is on PATH.",
+            "Failed to start opencode serve: {}. Install OpenCode (e.g. brew install opencode) or use a build that includes it.",
             e
         )),
     }
@@ -270,10 +449,36 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_shell::init())
+        .setup(|app| {
+            // Only auto-open inspector in dev; built app uses menu "View -> Toggle Developer Tools".
+            #[cfg(debug_assertions)]
+            if let Some(window) = app.get_webview_window("main") {
+                window.open_devtools();
+            }
+            // Menu so user can open devtools in built app.
+            let handle = app.handle().clone();
+            let view_submenu = SubmenuBuilder::new(&handle, "View")
+                .text("open_devtools", "Toggle Developer Tools")
+                .build()?;
+            let menu = Menu::with_items(&handle, &[&view_submenu])?;
+            app.set_menu(menu)?;
+            Ok(())
+        })
+        .on_menu_event(|app, event| {
+            if event.id().as_ref() == "open_devtools" {
+                if let Some(window) = app.get_webview_window("main") {
+                    window.open_devtools();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             greet,
             get_platform,
             get_home_dir,
+            read_workspace_path,
+            save_workspace_path,
+            pick_workspace_folder,
             kill_process_on_port,
             start_opencode_serve,
             install_skill_from_zip,

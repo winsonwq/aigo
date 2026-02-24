@@ -2,12 +2,14 @@
   "name": "aigo",
   "private": true,
   "version": "0.1.0",
+  "opencodeVersion": "1.2.10",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "download-opencode": "node scripts/download-opencode.mjs",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

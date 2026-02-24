@@ -1,0 +1,5 @@
+# 工作区路径的读写（持久化到本地文件，不依赖 localStorage）
+[[permission]]
+identifier = "allow-workspace-path"
+description = "Enables read_workspace_path and save_workspace_path for persisting workspace directory."
+commands.allow = ["read_workspace_path", "save_workspace_path"]
