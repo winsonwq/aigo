@@ -1,0 +1,5 @@
+# Allow the frontend to get user home dir for default workspace path.
+[[permission]]
+identifier = "allow-get-home-dir"
+description = "Enables the get_home_dir command to return the user's home directory path."
+commands.allow = ["get_home_dir"]

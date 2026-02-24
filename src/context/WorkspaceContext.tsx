@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
 
 const STORAGE_KEY = "aigo_workspace_path";
 
@@ -49,11 +50,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const openFolderPicker = useCallback(async (): Promise<string | null> => {
+    const defaultPath = workspacePath
+      ? workspacePath
+      : (await invoke<string>("get_home_dir").catch(() => null)) ?? undefined;
     const selected = await open({
       directory: true,
       multiple: false,
       title: "选择工作区文件夹",
-      ...(workspacePath ? { defaultPath: workspacePath } : {}),
+      ...(defaultPath ? { defaultPath } : {}),
     });
     // 对话框可能返回 string | string[] | null（依平台/选项）
     const raw =

@@ -13,13 +13,13 @@ export function WorkspaceButton({
   disabled?: boolean;
   className?: string;
 }) {
-  const label = workspacePath ?? "选择工作区";
+  const label = workspacePath ?? "~";
   return (
     <button
       type="button"
       onClick={onPick}
       disabled={disabled}
-      title={workspacePath ? `工作区: ${workspacePath}` : "选择工作区文件夹（OpenCode 将以此目录为项目根）"}
+      title={workspacePath ? `工作区: ${workspacePath}` : "工作区: ~（主目录）；点击可更换（OpenCode 将以此目录为项目根）"}
       className={cn(
         "flex h-8 min-w-0 max-w-[180px] items-center gap-2 rounded-md px-2.5 py-1 text-left text-xs text-zinc-900",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300",

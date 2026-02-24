@@ -9,6 +9,7 @@
     "opener:allow-open-path",
     "dialog:default",
     "allow-get-platform",
+    "allow-get-home-dir",
     "allow-kill-process-on-port",
     "allow-start-opencode-serve",
     "core:window:default",

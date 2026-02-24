@@ -27,6 +27,31 @@ fn get_platform() -> Result<serde_json::Value, String> {
 
 const DEFAULT_OPENCODE_PORT: u16 = 4096;
 
+/// Returns the user's home directory path (e.g. for default workspace). Used when no workspace is set.
+#[tauri::command]
+fn get_home_dir() -> Result<String, String> {
+    #[cfg(unix)]
+    {
+        std::env::var("HOME").map_err(|_| "HOME not set".to_string())
+    }
+    #[cfg(windows)]
+    {
+        std::env::var("USERPROFILE").map_err(|_| "USERPROFILE not set".to_string())
+    }
+}
+
+/// Resolve directory to an absolute path; if None or empty or "~", use home dir.
+fn resolve_workspace_dir(directory: Option<String>) -> Result<Option<std::path::PathBuf>, String> {
+    let dir = match directory {
+        None => return Ok(Some(std::path::PathBuf::from(get_home_dir()?))),
+        Some(s) if s.trim().is_empty() || s.trim() == "~" => {
+            std::path::PathBuf::from(get_home_dir()?)
+        }
+        Some(s) => return Ok(Some(std::path::PathBuf::from(s))),
+    };
+    Ok(Some(dir))
+}
+
 /// Kill any process listening on the given port. Used before restarting OpenCode with a new workspace directory.
 #[tauri::command]
 fn kill_process_on_port(port: u16) -> Result<(), String> {
@@ -54,6 +79,7 @@ fn kill_process_on_port(port: u16) -> Result<(), String> {
 
 /// Start OpenCode serve in the background. Requires `opencode` on PATH (install via brew/npm/install script).
 /// If `directory` is provided, the process runs with that path as current working directory (like running opencode in that folder).
+/// When directory is None or empty, the user's home directory (~) is used as default.
 #[tauri::command]
 fn start_opencode_serve(port: Option<u16>, directory: Option<String>) -> Result<(), String> {
     let port = port.unwrap_or(DEFAULT_OPENCODE_PORT);
@@ -74,13 +100,14 @@ fn start_opencode_serve(port: Option<u16>, directory: Option<String>) -> Result<
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
-    if let Some(ref dir) = directory {
-        let path = Path::new(dir);
+    let resolved = resolve_workspace_dir(directory)?;
+    if let Some(path_buf) = resolved {
+        let path = path_buf.as_path();
         if !path.exists() {
-            return Err(format!("工作区路径不存在: {}", dir));
+            return Err(format!("工作区路径不存在: {}", path.display()));
         }
         if !path.is_dir() {
-            return Err(format!("工作区路径不是目录: {}", dir));
+            return Err(format!("工作区路径不是目录: {}", path.display()));
         }
         cmd.current_dir(path);
     }
@@ -246,6 +273,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             get_platform,
+            get_home_dir,
             kill_process_on_port,
             start_opencode_serve,
             install_skill_from_zip,

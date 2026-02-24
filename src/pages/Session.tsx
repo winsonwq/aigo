@@ -689,7 +689,7 @@ export function Session() {
       <div className="absolute bottom-0 left-0 right-0 px-6 pb-4">
         <form
           onSubmit={handleSubmit}
-          className="mx-auto w-full max-w-3xl rounded-2xl border border-zinc-300 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+          className="mx-auto w-full max-w-3xl rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700/60 dark:bg-zinc-900"
         >
           <MessageInput
             ref={messageInputRef}
