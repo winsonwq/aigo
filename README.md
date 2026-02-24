@@ -30,13 +30,15 @@ pnpm tauri build  # 打包桌面应用
 
 ## OpenCode 连接说明
 
-- 应用内点击「连接」会先尝试连接本机已运行的 OpenCode（默认 `http://127.0.0.1:4096`）；若连不上再尝试启动 `opencode serve`。
-- **若你已手动启动了 opencode serve**，在 Tauri 窗口里仍连不上，多半是 **CORS**：浏览器会拦截跨域请求。请用 `--cors` 指定前端来源后重启 serve，例如：
+- **打包后的应用已内置 OpenCode**：执行 `pnpm tauri build` 时会在构建前自动下载当前平台的 OpenCode CLI 到 `src-tauri/binaries/` 并随应用一起打包，用户安装后无需再单独安装 opencode。
+- 应用内点击「连接」会优先使用**内置的 OpenCode** 启动 `opencode serve`；若未打包进 sidecar（例如仅 `pnpm tauri dev` 且未事先下载），则回退到本机 PATH 上的 `opencode`。
+- 若需**单独下载** OpenCode 二进制（例如在未联网环境先在一台机器上下载再拷贝）：`pnpm run download-opencode`（可选版本：`node scripts/download-opencode.mjs 1.2.10`）。
+- **若你已手动启动了 opencode serve**，在 Tauri 窗口里仍连不上，多半是 **CORS**：请用 `--cors` 指定前端来源后重启 serve，例如：
   ```bash
   opencode serve --hostname 127.0.0.1 --port 4096 --cors http://localhost:1420 --cors tauri://localhost
   ```
-  开发时 Vite 一般为 `http://localhost:1420`；打包后 Tauri 可能用 `tauri://localhost`，按需添加。
 - 连接其他 opencode 服务时的认证（如密码）见 [PLAN.md](PLAN.md) 阶段 2 的「（后续）连接其他 OpenCode 服务与认证」。
+- **内置 OpenCode 如何测试**：见 [docs/testing-opencode-sidecar.md](docs/testing-opencode-sidecar.md)（开发/打包、有 sidecar/无 sidecar 等场景）。
 
 ## Rust 版本说明
 
