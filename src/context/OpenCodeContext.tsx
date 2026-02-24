@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   type ReactNode,
 } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -46,13 +47,15 @@ function useOpenCodeState() {
 
 export function OpenCodeProvider({ children }: { children: ReactNode }) {
   const dispatch = useDispatch<AppDispatch>();
-  const { workspacePath } = useWorkspace();
+  const { workspacePath, workspaceInitialized } = useWorkspace();
   const { status, errorMessage, client, engineSource } = useOpenCodeState();
 
+  // 等 workspace 完成首次读取后再连接，避免启动时用 null 连一次、路径到位又断线重连一次（整页“再加载一次”）
   useEffect(() => {
+    if (!workspaceInitialized) return;
     dispatch(disconnectOpencode());
     void dispatch(connectOpencode(workspacePath ?? undefined));
-  }, [workspacePath, dispatch]);
+  }, [workspaceInitialized, workspacePath, dispatch]);
 
   // 保持 status 与 client 一致：若显示已连接但 client 为空（异常状态），则置为未连接
   useEffect(() => {
@@ -82,15 +85,18 @@ export function OpenCodeProvider({ children }: { children: ReactNode }) {
     void dispatch(disconnectOpencode());
   }, [dispatch]);
 
-  const value: OpenCodeContextValue = {
-    status,
-    errorMessage,
-    client,
-    engineSource,
-    baseUrl: OPENCODE_BASE_URL,
-    connect,
-    disconnect,
-  };
+  const value = useMemo<OpenCodeContextValue>(
+    () => ({
+      status,
+      errorMessage,
+      client,
+      engineSource,
+      baseUrl: OPENCODE_BASE_URL,
+      connect,
+      disconnect,
+    }),
+    [status, errorMessage, client, engineSource, connect, disconnect]
+  );
 
   return (
     <OpenCodeContext.Provider value={value}>

@@ -4,7 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
+  useState,
   type ReactNode,
 } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -18,6 +18,8 @@ import {
 
 type WorkspaceContextValue = {
   workspacePath: string | null;
+  /** 是否已完成从 Rust 读取持久化路径（未完成前不触发 OpenCode 连接，避免启动时连两次） */
+  workspaceInitialized: boolean;
   setWorkspacePath: (path: string | null) => void;
   openFolderPicker: () => Promise<string | null>;
 };
@@ -29,14 +31,23 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const workspacePath = useSelector(
     (s: RootState) => s.workspace.workspacePath
   );
-  const initialLoadDone = useRef(false);
+  const [workspaceInitialized, setWorkspaceInitialized] = useState(false);
 
   useEffect(() => {
-    if (initialLoadDone.current) return;
-    initialLoadDone.current = true;
+    let cancelled = false;
     invoke<string | null>("read_workspace_path")
-      .then((path) => dispatch(workspaceSlice.actions.setWorkspacePath(path ?? null)))
-      .catch(() => {});
+      .then((path) => {
+        if (!cancelled) {
+          dispatch(workspaceSlice.actions.setWorkspacePath(path ?? null));
+          setWorkspaceInitialized(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setWorkspaceInitialized(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [dispatch]);
 
   const setWorkspacePath = useCallback(
@@ -57,10 +68,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const value = useMemo<WorkspaceContextValue>(
     () => ({
       workspacePath,
+      workspaceInitialized,
       setWorkspacePath,
       openFolderPicker,
     }),
-    [workspacePath, setWorkspacePath, openFolderPicker]
+    [workspacePath, workspaceInitialized, setWorkspacePath, openFolderPicker]
   );
 
   return (
