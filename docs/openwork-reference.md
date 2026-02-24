@@ -164,11 +164,33 @@ OpenCode 服务端具备**会话标题自动更新**能力：在用户发送首�
 
 ---
 
-## 9. 阶段 2 调研结论：OpenCode 内置/下载与 sidecar（AIGO）
+## 9. OpenCode 内置/下载与 sidecar：AIGO 与 OpenWork 对齐情况
 
-- **OpenWork 现状**（[Issue #121](https://github.com/different-ai/openwork/issues/121)）：OpenWork 默认从 PATH 启动 OpenCode，**不打包 sidecar**（release 无 `externalBin`）；`engine_install` 仅支持 macOS/Linux（curl \| bash），Windows 显式返回「不支持」。用户需自行安装 CLI，易出现「CLI not found」「serve unavailable」「exited immediately」等问题。
-- **OpenCode CLI 获取方式**：官方未提供「单文件 CLI 二进制」直接下载页。安装方式为：`curl -fsSL https://opencode.ai/install | bash`、`npm i -g opencode-ai`、`brew install anomalyco/tap/opencode` 等；桌面版 DMG/安装包见 [opencode.ai/download](https://opencode.ai/download)，为桌面应用而非 CLI。
-- **AIGO 当前策略**：从本机 **PATH** 启动 `opencode serve`；若未安装则提示用户安装（如 `brew install opencode`）。**后续可做**：解析官方 install 脚本得到各平台二进制 URL，或使用固定版本号 + GitHub Releases（若 OpenCode 提供 CLI 独立包），实现「下载到应用目录 → 从应用目录 spawn」；需运行时根据 OS/arch 选择对应构建（已预留 Tauri 侧 `get_platform` 命令）。
+### 9.1 OpenWork 当前机制（dev 分支）
+
+- **打包**：`tauri.conf.json` 中 `bundle.externalBin` 包含 `sidecars/opencode`，release 会随应用一起分发 OpenCode CLI。
+- **构建前**：`beforeBuildCommand` 执行 `prepare:sidecar`（`node scripts/prepare-sidecar.mjs`）再构建 UI；该脚本从 GitHub Releases 下载当前平台 OpenCode 到 `packages/desktop/src-tauri/sidecars/`，命名 `opencode-<target-triple>`。
+- **版本**：`package.json` 的 `opencodeVersion`（如 1.2.6）或环境变量 `OPENCODE_VERSION`；支持用 GitHub API 拉取 latest。
+- **资源映射**：与 [anomalyco/opencode](https://github.com/anomalyco/opencode) 发布物一致：darwin-arm64、darwin-x64-baseline、linux-x64-baseline、linux-arm64、windows-x64-baseline、windows-arm64 等。
+- **运行时**：优先用 sidecar 启动 `opencode serve`，无 sidecar 时回退到 PATH（[Issue #121](https://github.com/different-ai/openwork/issues/121) 提出的方案已落地）。
+
+### 9.2 AIGO 当前机制（与 OpenWork 对齐）
+
+- **打包**：`bundle.externalBin` 包含 `binaries/opencode`，构建前执行 `node scripts/download-opencode.mjs`，将 OpenCode 下载到 `src-tauri/binaries/`，命名 `opencode-<target-triple>`。
+- **版本**：优先顺序为 CLI 参数 → 环境变量 `OPENCODE_VERSION` → `package.json` 的 `opencodeVersion` → 默认 1.2.10；支持传 `latest` 从 GitHub API 取最新版。
+- **资源映射**：与 OpenWork 一致（同一套 target triple → asset 表），x64 使用 baseline 以兼容无 AVX2 的机器；支持 aarch64-apple-darwin、x86_64-apple-darwin、x86_64/aarch64-unknown-linux-gnu、x86_64/aarch64-pc-windows-msvc。
+- **运行时**：Rust 端 `start_opencode_serve` 优先 `app.shell().sidecar("opencode")`，失败则回退到 PATH 及常见安装路径（含 login shell 的 PATH），与 OpenWork「先 sidecar 再 PATH」一致。
+
+### 9.3 差异小结
+
+| 项目 | OpenWork | AIGO |
+|------|----------|------|
+| 配置键 | `sidecars/opencode` | `binaries/opencode` |
+| 构建前脚本 | `prepare:sidecar`（还准备 openwork-server、opencode-router 等） | `download-opencode.mjs`（仅 OpenCode） |
+| 版本来源 | opencodeVersion + 可选 GitHub latest | opencodeVersion / OPENCODE_VERSION / 默认 + 可选 latest |
+| 运行时顺序 | sidecar → PATH | sidecar → PATH（一致） |
+
+**结论**：AIGO 的内置 OpenCode 机制与 OpenWork 已对齐：均从 GitHub Releases 按 target 下载、打包为 Tauri sidecar、运行时优先 sidecar 再回退 PATH；差异仅在目录名与脚本职责范围。
 
 ---
 
