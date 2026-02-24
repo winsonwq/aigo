@@ -3,7 +3,9 @@ import {
   createAsyncThunk,
   type PayloadAction,
 } from "@reduxjs/toolkit";
+import type { AppDispatch } from "@/store";
 import type { RootState } from "@/store";
+import { disconnectOpencode } from "@/store/slices/opencodeSlice";
 import { normalizeModel, readDefaultModel } from "@/config/models";
 
 // --- Types (re-exported for consumers) ---
@@ -172,9 +174,12 @@ export const fetchMessages = createAsyncThunk<
   { state: RootState; rejectValue: string }
 >(
   "messages/fetch",
-  async (sessionId, { getState, rejectWithValue }) => {
+  async (sessionId, { getState, dispatch, rejectWithValue }) => {
     const client = getState().opencode.client;
-    if (!client || !sessionId) return rejectWithValue("未连接或缺少 sessionId");
+    if (!client || !sessionId) {
+      if (!client) (dispatch as AppDispatch)(disconnectOpencode());
+      return rejectWithValue("未连接或缺少 sessionId");
+    }
     let res: Awaited<ReturnType<typeof client.session.messages>>;
     try {
       res = await client.session.messages({ sessionID: sessionId, limit: 100 });
@@ -207,6 +212,7 @@ export const sendPrompt = createAsyncThunk<
   ) => {
     const client = getState().opencode.client;
     if (!client || !sessionId || !text.trim()) {
+      if (!client) (dispatch as AppDispatch)(disconnectOpencode());
       return rejectWithValue("缺少 client、sessionId 或内容");
     }
     const state = getState().messages;
@@ -331,6 +337,7 @@ export const stopSession = createAsyncThunk<
     const client = getState().opencode.client;
     const busy = getState().messages.busySessionIds[sessionId];
     if (!client || !sessionId || !busy) {
+      if (!client) (dispatch as AppDispatch)(disconnectOpencode());
       return rejectWithValue("未连接、缺少 sessionId 或会话未在忙");
     }
     await client.session.abort({ sessionID: sessionId });
@@ -348,7 +355,10 @@ export const respondToPermission = createAsyncThunk<
   async (response, { getState, dispatch, rejectWithValue }) => {
     const client = getState().opencode.client;
     const req = getState().messages.pendingPermission;
-    if (!client || !req) return rejectWithValue("未连接或无待处理权限");
+    if (!client || !req) {
+      if (!client) (dispatch as AppDispatch)(disconnectOpencode());
+      return rejectWithValue("未连接或无待处理权限");
+    }
     await client.permission.respond({
       sessionID: req.sessionID,
       permissionID: req.id,
@@ -427,8 +437,10 @@ export const messagesSlice = createSlice({
   extraReducers(builder) {
     builder
       .addCase(fetchMessages.pending, (state, action) => {
-        state.loadingSessionIds[action.meta.arg] = true;
-        delete state.errors[action.meta.arg];
+        const sessionId = action.meta.arg;
+        const hasCache = (state.messagesBySession[sessionId]?.length ?? 0) > 0;
+        if (!hasCache) state.loadingSessionIds[sessionId] = true;
+        delete state.errors[sessionId];
       })
       .addCase(fetchMessages.fulfilled, (state, action) => {
         const { sessionId, messages } = action.payload;
