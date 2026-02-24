@@ -92,7 +92,7 @@ function ModelSelect({
         <ul
           role="listbox"
           className={cn(
-            "absolute left-0 z-50 max-h-64 w-full overflow-auto rounded-md",
+            "absolute left-0 z-50 max-h-64 w-full overflow-auto rounded-md shadow-lg",
             isTop ? "bottom-full mb-1" : "top-full mt-1",
             variant === "bordered" &&
               "border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900",

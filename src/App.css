@@ -26,6 +26,11 @@ body,
   /* 颜色（与 implementation.md 1.2 一致，供全局与 .page-header 等使用） */
   --color-text-primary: #18181b;
   --color-bg: #f7f7f8;
+  /* 滚动条：极细样式，亮色模式 */
+  --color-scrollbar-track: transparent;
+  --color-scrollbar-thumb: rgba(0, 0, 0, 0.18);
+  --color-scrollbar-thumb-hover: rgba(0, 0, 0, 0.28);
+  --size-scrollbar: 6px;
   /* 字体 */
   --font-size-page-title: 1.25rem;
   --font-weight-page-title: 600;
@@ -35,6 +40,8 @@ body,
   :root {
     --color-text-primary: #e4e4e7;
     --color-bg: #0a0a0b;
+    --color-scrollbar-thumb: rgba(255, 255, 255, 0.22);
+    --color-scrollbar-thumb-hover: rgba(255, 255, 255, 0.35);
   }
 }
 
@@ -46,16 +53,31 @@ body {
 
 * {
   box-sizing: border-box;
+  /* 极细滚动条，适配亮色/暗色模式 */
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track);
 }
 
-/* 隐藏滚动条，保留滚动能力 */
 *::-webkit-scrollbar {
-  width: 0;
-  height: 0;
+  width: var(--size-scrollbar);
+  height: var(--size-scrollbar);
 }
 
-* {
-  scrollbar-width: none;
+*::-webkit-scrollbar-track {
+  background: var(--color-scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--color-scrollbar-thumb);
+  border-radius: calc(var(--size-scrollbar) / 2);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--color-scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--color-scrollbar-track);
 }
 
 /* Agent 思考中标签的光标闪烁效果 */
