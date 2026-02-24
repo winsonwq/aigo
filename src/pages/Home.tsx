@@ -4,10 +4,8 @@ import { ArrowUp, Paperclip, X } from "lucide-react";
 import { MessageInput, type MessageInputRef } from "@/components/MessageInput";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { WorkspaceButton } from "@/components/WorkspaceButton";
 import { ModelSelect } from "@/components/ui/model-select";
 import { useOpenCode } from "@/context/OpenCodeContext";
-import { useWorkspace } from "@/context/WorkspaceContext";
 import { persistDefaultModel, readDefaultModel } from "@/config/models";
 import { useModelOptions } from "@/hooks/useModelOptions";
 import { useSessions } from "@/hooks/useSessions";
@@ -67,7 +65,6 @@ export function Home() {
   const messageInputRef = useRef<MessageInputRef>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { workspacePath, openFolderPicker } = useWorkspace();
   const isConnected = status === "connected";
   const canSend =
     isConnected &&
@@ -227,10 +224,6 @@ export function Home() {
               value={selectedModel}
               options={modelOptions}
               onChange={(v) => setSelectedModel(persistDefaultModel(v))}
-              disabled={creating}
-            />
-            <WorkspaceButton
-              onPick={() => void openFolderPicker()}
               disabled={creating}
             />
           </div>

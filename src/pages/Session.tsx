@@ -21,10 +21,8 @@ import {
 import { ThinkingBlock } from "@/components/ThinkingBlock";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { WorkspaceButton } from "@/components/WorkspaceButton";
 import { ModelSelect } from "@/components/ui/model-select";
 import { useOpenCode } from "@/context/OpenCodeContext";
-import { useWorkspace } from "@/context/WorkspaceContext";
 import { persistDefaultModel, readDefaultModel } from "@/config/models";
 import { useModelOptions } from "@/hooks/useModelOptions";
 import { useSessions } from "@/hooks/useSessions";
@@ -449,7 +447,7 @@ export function Session() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const navigate = useNavigate();
-  const { status: openCodeStatus, client, disconnect } = useOpenCode();
+  const { status: openCodeStatus, client } = useOpenCode();
   const { sessions, refetch: refetchSessions, setSessionTitle } = useSessions();
   const initialMessageSentRef = useRef(false);
   const state = location.state as { initialMessage?: InitialMessageState } | undefined;
@@ -599,7 +597,6 @@ export function Session() {
     const last = all[all.length - 1];
     return isSessionBusy && last ? last.info.id : null;
   }, [groupedMessages, isSessionBusy]);
-  const { workspacePath, openFolderPicker } = useWorkspace();
   const canSend = useMemo(() => {
     if (!isConnected || isSessionBusy) return false;
     return input.trim().length > 0 || attachments.length > 0;
@@ -609,12 +606,7 @@ export function Session() {
     if (!id) navigate("/", { replace: true });
   }, [id, navigate]);
 
-  // 当出现「未连接或缺少 sessionId」且实际 client 为空时，同步为未连接状态，避免左下角仍显示「已连接」但菜单/会话无法操作
-  useEffect(() => {
-    if (error === "未连接或缺少 sessionId" && client === null) {
-      disconnect();
-    }
-  }, [error, client, disconnect]);
+  // client 为空时 messages 的 thunk 会派发 disconnectOpencode，与 OpenCodeContext 的 effect 一起保证「已连接」与 client 一致，避免卡在不可操作状态
 
   if (!id) {
     return (
@@ -748,10 +740,6 @@ export function Session() {
                 value={selectedModel}
                 options={modelOptions}
                 onChange={(v) => setSelectedModel(persistDefaultModel(v))}
-                disabled={isSessionBusy}
-              />
-              <WorkspaceButton
-                onPick={() => void openFolderPicker()}
                 disabled={isSessionBusy}
               />
             </div>

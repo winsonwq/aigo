@@ -6,7 +6,9 @@ import { DropdownMenu, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useOpenCode } from "@/context/OpenCodeContext";
+import { useWorkspace } from "@/context/WorkspaceContext";
 import { useSessions, type SessionItem } from "@/hooks/useSessions";
+import { WorkspaceButton } from "@/components/WorkspaceButton";
 import { cn } from "@/lib/utils";
 
 function SidebarStatusBar() {
@@ -28,7 +30,7 @@ function SidebarStatusBar() {
           : "未连接";
 
   return (
-    <footer className="flex h-8 flex-shrink-0 items-center gap-2 px-3 py-1.5 text-[11px] text-zinc-600 dark:text-zinc-400">
+    <div className="flex h-8 flex-shrink-0 items-center gap-2 px-3 py-1.5 text-[11px] text-zinc-600 dark:text-zinc-400">
       <span
         className={`h-1.5 w-1.5 shrink-0 rounded-full ${
           isConnected
@@ -55,7 +57,7 @@ function SidebarStatusBar() {
           重试
         </Button>
       )}
-    </footer>
+    </div>
   );
 }
 
@@ -233,6 +235,7 @@ export function Sidebar() {
   }, [currentSessionId, refetchSessions]);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const { confirm: confirmModal } = useConfirmModal();
+  const { openFolderPicker } = useWorkspace();
   const isConnected = status === "connected";
 
   const handleDeleteSession = async (sessionID: string) => {
@@ -273,7 +276,12 @@ export function Sidebar() {
         currentSessionId={currentSessionId}
         onDeleteSession={handleDeleteSession}
       />
-      <SidebarStatusBar />
+      <footer className="flex shrink-0 flex-col border-t border-zinc-200/90 dark:border-zinc-700/80">
+        <div className="px-2 pt-2">
+          <WorkspaceButton onPick={() => void openFolderPicker()} className="w-full max-w-none justify-start" />
+        </div>
+        <SidebarStatusBar />
+      </footer>
     </aside>
   );
 }
