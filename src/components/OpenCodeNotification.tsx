@@ -3,60 +3,60 @@ import { useOpenCode } from "@/context/OpenCodeContext";
 import { Button } from "./ui/button";
 
 /**
- * 轻量级 OpenCode 状态通知：连接中 / 未连接或错误时在角落展示，不遮挡主界面。
+ * OpenCode 连接状态 overlay：未连接时全屏遮罩，连接中显示 loading，否则显示错误/未连接与连接按钮。
  */
 export function OpenCodeNotification() {
   const { status, errorMessage, connect } = useOpenCode();
 
+  const notConnected = status !== "connected";
   const isConnecting = status === "connecting";
-  const isError = status === "error";
-  const isIdle = status === "idle";
-  const showNotification = isConnecting || isError || isIdle;
 
-  if (!showNotification) return null;
+  if (!notConnected) return null;
 
   return (
     <div
-      className="fixed bottom-4 right-4 z-[60] flex max-w-sm items-center gap-3 rounded-lg border border-zinc-700/80 bg-zinc-900/95 px-4 py-3 shadow-lg backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/60 backdrop-blur-sm"
       role="status"
       aria-live="polite"
-      aria-label={
-        isConnecting
-          ? "正在连接 OpenCode"
-          : isError
-            ? "OpenCode 连接失败"
-            : "未连接 OpenCode"
-      }
+      aria-label={isConnecting ? "正在连接 OpenCode" : "未连接 OpenCode"}
     >
-      {isConnecting ? (
-        <>
-          <Loader2
-            className="h-5 w-5 shrink-0 animate-spin text-zinc-400"
-            aria-hidden
-          />
-          <span className="text-sm text-zinc-200">正在连接 OpenCode…</span>
-        </>
-      ) : (
-        <>
-          <div className="min-w-0 flex-1">
+      <div className="flex flex-col items-center gap-4">
+        {isConnecting ? (
+          <>
+            <Loader2
+              className="h-10 w-10 shrink-0 animate-spin text-zinc-300"
+              aria-hidden
+            />
             <p className="text-sm font-medium text-zinc-200">
-              {isError ? "OpenCode 未连接" : "未连接 OpenCode"}
+              正在连接 OpenCode…
             </p>
-            {isError && errorMessage && (
+          </>
+        ) : (
+          <>
+            <p className="text-center text-sm font-medium text-zinc-200">
+              {status === "error" ? "OpenCode 未连接" : "未连接 OpenCode"}
+            </p>
+            {status === "error" && errorMessage && (
               <p
-                className="mt-0.5 truncate text-xs text-amber-400/90"
-                title={errorMessage}
+                className="mt-1 max-w-md text-center text-xs text-amber-400/90"
                 role="alert"
               >
                 {errorMessage}
               </p>
             )}
-          </div>
-          <Button type="button" size="sm" onClick={() => void connect()}>
-            连接
-          </Button>
-        </>
-      )}
+            <p className="text-center text-xs text-zinc-400">
+              请点击下方按钮连接后再使用会话与 Skills。
+            </p>
+            <Button
+              type="button"
+              onClick={() => void connect()}
+              className="mt-1"
+            >
+              连接 OpenCode
+            </Button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
