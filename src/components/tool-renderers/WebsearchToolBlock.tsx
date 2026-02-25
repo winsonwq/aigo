@@ -1,6 +1,7 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { markdownLinkComponents } from "@/components/MarkdownLink";
 import { Search } from "lucide-react";
 import {
   AssistantCollapsibleBlock,
@@ -64,7 +65,7 @@ export function WebsearchToolBlock({
             </div>
             {resultMarkdown !== "" && (
               <div className="max-h-32 overflow-auto border-t border-zinc-200/80 px-2 py-1.5 text-[11px] text-zinc-700 dark:border-zinc-600/80 dark:text-zinc-200 prose prose-sm dark:prose-invert max-w-none">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{resultMarkdown}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownLinkComponents}>{resultMarkdown}</ReactMarkdown>
               </div>
             )}
           </div>

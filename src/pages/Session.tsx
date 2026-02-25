@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
+import { markdownLinkComponents } from "@/components/MarkdownLink";
 import remarkGfm from "remark-gfm";
 import { ArrowUp, Paperclip, Square, X } from "lucide-react";
 import { MessageInput, type MessageInputRef } from "@/components/MessageInput";
@@ -247,7 +248,7 @@ function MessageBubble({
           if (seg.kind === "text") {
             return (
               <div key={seg.key} className="markdown-content">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{seg.text}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownLinkComponents}>{seg.text}</ReactMarkdown>
               </div>
             );
           }
@@ -280,7 +281,7 @@ function MessageBubble({
           if (fallbackText) {
             return (
               <div key={seg.key} className="markdown-content">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{fallbackText}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownLinkComponents}>{fallbackText}</ReactMarkdown>
               </div>
             );
           }

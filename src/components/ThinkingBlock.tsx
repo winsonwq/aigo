@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { markdownLinkComponents } from "@/components/MarkdownLink";
 import {
   AssistantCollapsibleBlock,
   getBlockLabel,
@@ -48,7 +49,7 @@ export function ThinkingBlock({ part, isStreaming }: ThinkingBlockProps) {
     >
       {text ? (
         <div className="assistant-thinking-content markdown-content">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownLinkComponents}>{text}</ReactMarkdown>
         </div>
       ) : undefined}
     </AssistantCollapsibleBlock>

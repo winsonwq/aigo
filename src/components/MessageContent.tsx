@@ -1,6 +1,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { MessagePart } from "@/hooks/useSessionMessages";
+import { markdownLinkComponents } from "@/components/MarkdownLink";
 
 function isTextPart(p: MessagePart): p is { type: "text"; text?: string; content?: string } {
   return p && typeof p === "object" && "type" in p && (p as { type: string }).type === "text";
@@ -28,7 +29,7 @@ export function MessageContent({ parts }: { parts: MessagePart[] }) {
         if (isTextPart(part)) {
           return (
             <div key={(part as { id?: string }).id ?? `p-${index}`} className="prose prose-sm dark:prose-invert max-w-none">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{partText(part)}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownLinkComponents}>{partText(part)}</ReactMarkdown>
             </div>
           );
         }

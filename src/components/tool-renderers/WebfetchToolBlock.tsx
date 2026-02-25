@@ -1,6 +1,7 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { markdownLinkComponents } from "@/components/MarkdownLink";
 import {
   AssistantCollapsibleBlock,
   getBlockLabel,
@@ -49,7 +50,7 @@ export function WebfetchToolBlock({
               {output.length > 2000 ? (
                 <pre className="whitespace-pre-wrap font-sans">{output.slice(0, 2000)}…</pre>
               ) : (
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{output}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownLinkComponents}>{output}</ReactMarkdown>
               )}
             </div>
           )}

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { markdownLinkComponents } from "@/components/MarkdownLink";
 import { BookOpen } from "lucide-react";
 import {
   AssistantCollapsibleBlock,
@@ -56,7 +57,7 @@ export function SkillToolBlock({
         <>
           {output !== "" && (
             <div className="max-h-48 overflow-auto rounded border border-zinc-200/80 bg-zinc-50/80 px-2 py-1.5 text-xs dark:border-zinc-600/80 dark:bg-zinc-800/80 prose prose-sm dark:prose-invert max-w-none">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownLinkComponents}>
                 {output.slice(0, 3000)}
               </ReactMarkdown>
             </div>
