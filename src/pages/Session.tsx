@@ -1,23 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import {
-  ArrowUp,
-  Loader2,
-  Paperclip,
-  Square,
-  X,
-} from "lucide-react";
-import {
-  AssistantCollapsibleBlock,
-  getBlockLabel,
-} from "@/components/AssistantCollapsibleBlock";
+import { ArrowUp, Paperclip, Square, X } from "lucide-react";
 import { MessageInput, type MessageInputRef } from "@/components/MessageInput";
 import {
-  QuestionsBlock,
-  getQuestionsPayloadFromToolState,
-} from "@/components/QuestionsBlock";
+  renderToolPart,
+  type ToolRenderContext,
+} from "@/components/AssistantToolRenderers";
 import { ThinkingBlock } from "@/components/ThinkingBlock";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -213,25 +203,24 @@ function UserMessageBlock({ msg }: { msg: MessageWithParts }) {
   );
 }
 
-/** 助手单轮内的工具调用：每个一行气泡，可展开详情 */
+/** 助手单轮内的工具调用：通过 renderToolPart 分发到通用/Question 等渲染，stableKey 避免 refetch 后重挂载丢失本地状态 */
 function AssistantToolCallGroup({
+  messageId,
+  segmentIndex,
   parts,
-  onQuestionAnswer,
-  nextUserMessageText,
+  context,
 }: {
+  messageId: string;
+  segmentIndex: number;
   parts: ToolPart[];
-  onQuestionAnswer?: (answerText: string) => void;
-  nextUserMessageText?: string;
+  context: ToolRenderContext;
 }) {
   return (
     <div className="tool my-2 flex flex-col gap-1">
       {parts.map((part, idx) => (
-        <ToolPartBlock
-          key={(part as { id?: string }).id ?? `tool-${idx}`}
-          part={part}
-          onQuestionAnswer={onQuestionAnswer}
-          nextUserMessageText={nextUserMessageText}
-        />
+        <Fragment key={`${messageId}-seg-${segmentIndex}-${idx}`}>
+          {renderToolPart(part, context, `${messageId}-seg-${segmentIndex}-${idx}`)}
+        </Fragment>
       ))}
     </div>
   );
@@ -243,12 +232,14 @@ function MessageBubble({
   isStreaming = false,
   onQuestionAnswer,
   nextUserMessageText,
+  onRefetchForIncompleteQuestion,
 }: {
   msg: MessageWithParts;
   isUser: boolean;
   isStreaming?: boolean;
   onQuestionAnswer?: (answerText: string) => void;
   nextUserMessageText?: string;
+  onRefetchForIncompleteQuestion?: () => void;
 }) {
   if (isUser) {
     return <UserMessageBlock msg={msg} />;
@@ -260,7 +251,7 @@ function MessageBubble({
   return (
     <div className="assistant w-full text-base">
       <div className="w-full px-3 py-1">
-        {segments.map((seg) => {
+        {segments.map((seg, segIndex) => {
           if (seg.kind === "text") {
             return (
               <div key={seg.key} className="markdown-content">
@@ -274,10 +265,15 @@ function MessageBubble({
           if (seg.kind === "tools") {
             return (
               <AssistantToolCallGroup
-                key={seg.key}
+                key={`${msg.info.id ?? ""}-tools-${segIndex}`}
+                messageId={msg.info.id ?? ""}
+                segmentIndex={segIndex}
                 parts={seg.parts}
-                onQuestionAnswer={onQuestionAnswer}
-                nextUserMessageText={nextUserMessageText}
+                context={{
+                  onQuestionAnswer,
+                  nextUserMessageText,
+                  onRefetchForIncompleteQuestion,
+                }}
               />
             );
           }
@@ -306,137 +302,6 @@ function MessageBubble({
   );
 }
 
-function ToolPartBlock({
-  part,
-  onQuestionAnswer,
-  nextUserMessageText,
-}: {
-  part: ToolPart;
-  onQuestionAnswer?: (answerText: string) => void;
-  nextUserMessageText?: string;
-}) {
-  const isQuestionTool = part.tool?.toLowerCase() === "question";
-  const questionsPayload = isQuestionTool
-    ? getQuestionsPayloadFromToolState(part.state ?? {})
-    : null;
-  const [expanded, setExpanded] = useState(!!questionsPayload);
-  const status = part.state?.status ?? "pending";
-  const isCalling = status === "running" || status === "pending";
-  const questionAlreadyAnswered =
-    !!nextUserMessageText && nextUserMessageText.startsWith("我选择：");
-  const statusLabel =
-    status === "pending"
-      ? "等待"
-      : status === "running"
-        ? "执行中"
-        : status === "completed"
-          ? "完成"
-          : "错误";
-  const hasDetails =
-    (part.state?.input && Object.keys(part.state.input).length > 0) ||
-    (part.state?.output != null && part.state.output !== "") ||
-    (part.state?.error != null && part.state.error !== "");
-  const statusVariant =
-    status === "error"
-      ? "destructive"
-      : status === "running"
-        ? "warning"
-        : status === "completed"
-          ? "success"
-          : "secondary";
-  const toolInput = part.state?.input;
-  const inputUrl =
-    toolInput && typeof toolInput === "object" && "url" in toolInput
-      ? String((toolInput as { url?: unknown }).url ?? "")
-      : "";
-  const isSubagentCall =
-    part.tool.toLowerCase().includes("subagent") ||
-    part.tool.toLowerCase().includes("task") ||
-    (toolInput &&
-      typeof toolInput === "object" &&
-      "subagent_type" in toolInput &&
-      typeof (toolInput as { subagent_type?: unknown }).subagent_type === "string");
-  const summaryText = part.state?.error
-    ? String(part.state.error)
-    : inputUrl || String(part.state?.title ?? "");
-  const outputText = (part.state?.output ?? "").trim();
-  const label = getBlockLabel("Calling", "Called", isCalling);
-
-  const summarySuffix = (
-    <>
-      {status === "running" && (
-        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-zinc-400 dark:text-zinc-500" />
-      )}
-      <Badge variant={statusVariant} className="shrink-0 text-[10px]">
-        {statusLabel}
-      </Badge>
-      <span className="shrink-0 font-mono font-medium text-zinc-800 dark:text-zinc-200">
-        {part.tool}
-      </span>
-      {isSubagentCall && (
-        <span className="shrink-0 text-[10px] text-zinc-500 dark:text-zinc-400">subagent</span>
-      )}
-      {!!summaryText && (
-        <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-500 dark:text-zinc-400">
-          {summaryText}
-        </span>
-      )}
-    </>
-  );
-
-  const detailsContent =
-    questionsPayload != null ? (
-      <div className="space-y-3">
-        <QuestionsBlock
-          payload={questionsPayload}
-          onAnswerSubmit={onQuestionAnswer}
-          interactive={isCalling || status === "completed"}
-          alreadyAnswered={questionAlreadyAnswered}
-          answerText={questionAlreadyAnswered ? nextUserMessageText : undefined}
-        />
-        {part.state?.error != null && part.state.error !== "" && (
-          <p className="text-xs text-red-600 dark:text-red-400">{String(part.state.error)}</p>
-        )}
-      </div>
-    ) : hasDetails ? (
-      <div className="space-y-2 px-2 pb-2 pt-1.5">
-        {isSubagentCall && (
-          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">子代理调用详情</p>
-        )}
-        {part.state?.input && Object.keys(part.state.input).length > 0 && (
-          <div>
-            <div className="mb-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">输入</div>
-            <pre className="max-h-32 overflow-auto rounded-md bg-zinc-200/60 p-2 text-xs dark:bg-zinc-700/60">
-              {JSON.stringify(part.state.input, null, 2)}
-            </pre>
-          </div>
-        )}
-        {outputText !== "" && (
-          <div>
-            <div className="mb-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">输出</div>
-            <pre className="max-h-40 overflow-auto rounded-md bg-zinc-200/60 p-2 text-xs dark:bg-zinc-700/60">
-              {outputText}
-            </pre>
-          </div>
-        )}
-        {part.state?.error != null && part.state.error !== "" && (
-          <p className="text-xs text-red-600 dark:text-red-400">{String(part.state.error)}</p>
-        )}
-      </div>
-    ) : undefined;
-
-  return (
-    <AssistantCollapsibleBlock
-      label={label}
-      open={expanded}
-      onSummaryClick={() => setExpanded((e) => !e)}
-      summarySuffix={summarySuffix}
-    >
-      {detailsContent}
-    </AssistantCollapsibleBlock>
-  );
-}
-
 export type InitialMessageState = {
   text: string;
   modelRaw?: string;
@@ -459,6 +324,7 @@ export function Session() {
     isSessionBusy,
     sendPrompt,
     stopSession,
+    refetch: refetchMessages,
     pendingPermission,
     respondToPermission,
   } = useSessionMessages(id);
@@ -509,6 +375,19 @@ export function Session() {
     location.pathname,
     refetchSessions,
   ]);
+
+  const onQuestionAnswer = useCallback(
+    async (answerText: string): Promise<boolean> => {
+      try {
+        const ok = await sendPrompt(answerText, { modelRaw: selectedModel });
+        if (ok) void refetchSessions();
+        return ok;
+      } catch {
+        return false;
+      }
+    },
+    [sendPrompt, selectedModel, refetchSessions]
+  );
 
   useEffect(() => {
     if (!scrollRef.current) return;
@@ -698,8 +577,9 @@ export function Session() {
                           msg={msg}
                           isUser={false}
                           isStreaming={msg.info.id === streamingMessageId}
-                          onQuestionAnswer={sendPrompt}
+                          onQuestionAnswer={onQuestionAnswer}
                           nextUserMessageText={nextUserMessageText}
+                          onRefetchForIncompleteQuestion={refetchMessages}
                         />
                       ))}
                     </div>

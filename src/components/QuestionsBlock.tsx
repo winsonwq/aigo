@@ -100,8 +100,8 @@ export function getQuestionsPayloadFromToolState(state: {
 
 export type QuestionsBlockProps = {
   payload: QuestionsPayload;
-  /** 可选。传入后且在 interactive 为 true 时显示选项点击与「提交答案」 */
-  onAnswerSubmit?: (answerText: string) => void;
+  /** 可选。传入后且在 interactive 为 true 时显示选项点击与「提交答案」。可返回 Promise<boolean>，false 表示发送失败不视为已提交 */
+  onAnswerSubmit?: (answerText: string) => void | Promise<boolean | void>;
   /** 是否可交互（选择 + 提交）。仅 Calling 时为 true，Called 后为 false，刷新后由 alreadyAnswered 决定 */
   interactive?: boolean;
   /** 是否已回答（如根据下一条用户消息「我选择：」判断），刷新/重载后仍能显示已回答 */
@@ -122,8 +122,9 @@ export function QuestionsBlock({
 }: QuestionsBlockProps) {
   const [selected, setSelected] = useState<SelectedState>({});
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const canInteract = interactive && !!onAnswerSubmit && !submitted && !alreadyAnswered;
+  const canInteract = interactive && !!onAnswerSubmit && !submitted && !alreadyAnswered && !submitting;
 
   const toggleOption = (questionIdx: number, optionIdx: number, multiple: boolean) => {
     if (!canInteract) return;
@@ -154,11 +155,18 @@ export function QuestionsBlock({
     return parts.length === 1 ? `我选择：${parts[0]}` : `我选择：\n${parts.map((p, i) => `${i + 1}. ${p}`).join("\n")}`;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const text = buildAnswerText();
     if (!text || !onAnswerSubmit) return;
-    onAnswerSubmit(text);
-    setSubmitted(true);
+    setSubmitting(true);
+    try {
+      const result = await Promise.resolve(onAnswerSubmit(text));
+      if (result !== false) setSubmitted(true);
+    } catch {
+      // 发送失败时保持可再次提交
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const hasSelection = Object.values(selected).some((arr) => arr.length > 0);
@@ -244,10 +252,10 @@ export function QuestionsBlock({
             type="button"
             variant="default"
             size="sm"
-            disabled={!hasSelection}
-            onClick={handleSubmit}
+            disabled={!hasSelection || submitting}
+            onClick={() => void handleSubmit()}
           >
-            提交答案
+            {submitting ? "发送中…" : "提交答案"}
           </Button>
         </div>
       )}
