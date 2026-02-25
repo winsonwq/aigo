@@ -46,6 +46,18 @@ OpenWork 通过 **opencode-bridge** 与 OpenCode 运行时通信，采用三种�
 
 **UI 建议**：在会话详情页提供「Artifacts」面板或列表，每项包含：文件路径、操作类型（新建/修改）、可选时间或顺序；支持点击打开文件或定位到行（若与编辑器集成）。
 
+### 3.1 用户上传附件与「打开」回显（AIGO 实现）
+
+OpenCode 服务端只存储消息的 **文本 parts**（如 `[{ type: "text", text: "..." }]`），不存储用户本机文件路径。附件在 AIGO 中的做法是：
+
+- **发送时**：将附件列表格式化为一段文本（`[上传文件]\n- 1. 文件名 (大小)`）拼入同一条 text part 发给 OpenCode，模型可见；同时在本机保留**附件路径**（仅用于「用系统默认打开」）。
+- **回显**：服务端返回的消息里只有这段文本，没有路径。若希望 **reload 或重新打开 session 后** 仍能在消息气泡里点「打开」预览附件，需要**在客户端持久化路径**：
+  - 以 `sessionId` + `messageId` 为 key，将 `attachmentPaths: string[]` 写入 **localStorage**（或 Tauri 的持久化存储）。
+  - 每次 `fetchMessages` 拉取到消息后，用本地持久化数据补全每条用户消息的 `attachmentPaths`，再写入 Redux 并写回持久化。
+- **范围**：路径仅存在当前设备；清空站点数据或换设备后，历史消息的「打开」按钮将不可用，仅展示附件名与大小。
+
+实现见：`src/store/attachmentPathsPersistence.ts`、`messagesSlice` 中 `fetchMessages.fulfilled` 的合并与持久化调用。
+
 ---
 
 ## 4. OpenCode SQLite 结构（可选参考）

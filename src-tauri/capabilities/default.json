@@ -6,7 +6,7 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "opener:allow-open-path",
+    {"identifier":"opener:allow-open-path","allow":[{"path":"**"}]},
     "dialog:default",
     "allow-get-platform",
     "allow-get-home-dir",

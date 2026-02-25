@@ -3,14 +3,18 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { markdownLinkComponents } from "@/components/MarkdownLink";
 import remarkGfm from "remark-gfm";
-import { ArrowUp, Paperclip, Square, X } from "lucide-react";
+import { ArrowUp, Paperclip, Square } from "lucide-react";
 import { MessageInput, type MessageInputRef } from "@/components/MessageInput";
+import {
+  AttachmentChips,
+  formatBytes,
+  parseAttachmentBlockFromMessageText,
+} from "@/components/AttachmentChips";
 import {
   renderToolSegment,
   type ToolRenderContext,
 } from "@/components/AssistantToolRenderers";
 import { ThinkingBlock } from "@/components/ThinkingBlock";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ModelSelect } from "@/components/ui/model-select";
 import { useOpenCode } from "@/context/OpenCodeContext";
@@ -26,6 +30,7 @@ import {
 import { PermissionDialog } from "@/components/PermissionDialog";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { openPath } from "@tauri-apps/plugin-opener";
 
 function isTextPart(p: MessagePart): p is { type: "text"; text?: string; content?: string } {
   return p && typeof p === "object" && "type" in p && p.type === "text";
@@ -50,6 +55,7 @@ type Attachment = {
   name: string;
   size: number;
   type: string;
+  path?: string;
   excerpt?: string;
   truncated?: boolean;
 };
@@ -82,12 +88,6 @@ function groupMessagesByTurn(list: MessageWithParts[]): MessageGroup[] {
     last.assistant.push(msg);
   }
   return groups;
-}
-
-function formatBytes(size: number): string {
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function isLikelyTextFile(file: File): boolean {
@@ -192,13 +192,34 @@ function getMessageText(msg: MessageWithParts): string {
     .trim();
 }
 
-/** 用户消息：独立 padding，单独成块 */
+/** 用户消息：独立 padding，单独成块；附件区与输入框样式一致（芯片展示），有路径时可点击用系统默认打开 */
 function UserMessageBlock({ msg }: { msg: MessageWithParts }) {
   const text = getMessageText(msg);
+  const { mainText, attachmentItems } = parseAttachmentBlockFromMessageText(text);
+  const paths = msg.info.attachmentPaths ?? [];
+  const displayItems = attachmentItems.map((a, i) => ({
+    name: a.name,
+    sizeLabel: a.sizeLabel,
+    path: paths[i],
+  }));
   return (
     <div className="user my-8">
       <div className="w-full rounded-sm bg-zinc-200 px-3 py-2 text-base dark:bg-zinc-700/90">
-        <p className="whitespace-pre-wrap">{text}</p>
+        {mainText ? (
+          <p className="whitespace-pre-wrap">{mainText}</p>
+        ) : null}
+        {attachmentItems.length > 0 ? (
+          <div className={mainText ? "mt-2" : ""}>
+            <AttachmentChips
+              items={displayItems}
+              variant="display"
+              onOpen={(path) => void openPath(path).catch((e) => console.warn("打开附件失败:", e))}
+            />
+          </div>
+        ) : null}
+        {!mainText && attachmentItems.length === 0 ? (
+          <p className="whitespace-pre-wrap text-zinc-500">{text || "(空)"}</p>
+        ) : null}
       </div>
     </div>
   );
@@ -299,6 +320,7 @@ export type InitialMessageState = {
   text: string;
   modelRaw?: string;
   attachmentContext?: string;
+  attachmentPaths?: string[];
 };
 
 export function Session() {
@@ -350,6 +372,7 @@ export function Session() {
       const ok = await sendPrompt(initial.text.trim(), {
         modelRaw: initial.modelRaw,
         attachmentContext: initial.attachmentContext,
+        attachmentPaths: initial.attachmentPaths,
       });
       if (ok) {
         navigate(location.pathname, { replace: true, state: {} });
@@ -399,9 +422,13 @@ export function Session() {
       const titleText = text.trim() || "附件对话";
       if (titleText) void setSessionTitle(id, titleText);
     }
+    const attachmentPaths = attachments
+      .map((a) => a.path)
+      .filter((p): p is string => p != null);
     const ok = await sendPrompt(text || "请结合附件进行分析。", {
       modelRaw: selectedModel,
       attachmentContext: attachmentContext || undefined,
+      attachmentPaths: attachmentPaths.length ? attachmentPaths : undefined,
     });
     if (ok) {
       setAttachments([]);
@@ -440,6 +467,7 @@ export function Session() {
               name: r.name,
               size: r.size,
               type: "application/octet-stream",
+              path,
               excerpt: r.excerpt,
               truncated: r.truncated ?? false,
             });
@@ -603,21 +631,20 @@ export function Session() {
             onContentChange={(plainText) => setInput(plainText)}
           />
           {attachments.length > 0 && (
-            <div className="flex flex-wrap gap-2 px-3 pb-2">
-              {attachments.map((file) => (
-                <Badge key={file.id} variant="secondary" className="gap-1 pr-1">
-                  <span className="max-w-[180px] truncate">{file.name}</span>
-                  <span className="text-[10px] opacity-70">{formatBytes(file.size)}</span>
-                  <button
-                    type="button"
-                    onClick={() => setAttachments((prev) => prev.filter((a) => a.id !== file.id))}
-                    className="ml-0.5 rounded p-0.5 hover:bg-zinc-300 dark:hover:bg-zinc-600"
-                    aria-label={`移除 ${file.name}`}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
+            <div className="px-3 pb-2">
+              <AttachmentChips
+                items={attachments.map((a) => ({
+                  id: a.id,
+                  name: a.name,
+                  size: a.size,
+                  path: a.path,
+                }))}
+                variant="input"
+                onRemove={(item) =>
+                  setAttachments((prev) => prev.filter((a) => a.id !== item.id))
+                }
+                onOpen={(path) => void openPath(path).catch((e) => console.warn("打开附件失败:", e))}
+              />
             </div>
           )}
           <div className="flex items-center justify-between px-2 py-2">

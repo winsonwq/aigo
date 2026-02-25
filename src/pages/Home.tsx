@@ -1,8 +1,8 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowUp, Paperclip, X } from "lucide-react";
+import { ArrowUp, Paperclip } from "lucide-react";
 import { MessageInput, type MessageInputRef } from "@/components/MessageInput";
-import { Badge } from "@/components/ui/badge";
+import { AttachmentChips, formatBytes } from "@/components/AttachmentChips";
 import { Button } from "@/components/ui/button";
 import { ModelSelect } from "@/components/ui/model-select";
 import { useOpenCode } from "@/context/OpenCodeContext";
@@ -11,21 +11,17 @@ import { useModelOptions } from "@/hooks/useModelOptions";
 import { useSessions } from "@/hooks/useSessions";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { openPath } from "@tauri-apps/plugin-opener";
 
 type Attachment = {
   id: string;
   name: string;
   size: number;
   type: string;
+  path?: string;
   excerpt?: string;
   truncated?: boolean;
 };
-
-function formatBytes(size: number): string {
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 function isLikelyTextFile(file: File): boolean {
   if (file.type.startsWith("text/")) return true;
@@ -90,6 +86,9 @@ export function Home() {
       setInput("");
       messageInputRef.current?.clearContent();
       setAttachments([]);
+      const attachmentPaths = attachments
+        .map((a) => a.path)
+        .filter((p): p is string => p != null);
       navigate(`/session/${sessionId}`, {
         replace: false,
         state: {
@@ -97,6 +96,8 @@ export function Home() {
             text: body,
             modelRaw,
             attachmentContext: attachmentContext || undefined,
+            attachmentPaths:
+              attachmentPaths.length > 0 ? attachmentPaths : undefined,
           },
         },
       });
@@ -136,6 +137,7 @@ export function Home() {
               name: r.name,
               size: r.size,
               type: "application/octet-stream",
+              path,
               excerpt: r.excerpt,
               truncated: r.truncated ?? false,
             });
@@ -212,21 +214,20 @@ export function Home() {
           onContentChange={(plainText) => setInput(plainText)}
         />
         {attachments.length > 0 && (
-          <div className="flex flex-wrap gap-2 px-3 pb-2">
-            {attachments.map((file) => (
-              <Badge key={file.id} variant="secondary" className="gap-1 pr-1">
-                <span className="max-w-[180px] truncate">{file.name}</span>
-                <span className="text-[10px] opacity-70">{formatBytes(file.size)}</span>
-                <button
-                  type="button"
-                  onClick={() => setAttachments((prev) => prev.filter((a) => a.id !== file.id))}
-                  className="ml-0.5 rounded p-0.5 hover:bg-zinc-300 dark:hover:bg-zinc-600"
-                  aria-label={`移除 ${file.name}`}
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </Badge>
-            ))}
+          <div className="px-3 pb-2">
+            <AttachmentChips
+              items={attachments.map((a) => ({
+                id: a.id,
+                name: a.name,
+                size: a.size,
+                path: a.path,
+              }))}
+              variant="input"
+              onRemove={(item) =>
+                setAttachments((prev) => prev.filter((a) => a.id !== item.id))
+              }
+              onOpen={(path) => void openPath(path).catch((e) => console.warn("打开附件失败:", e))}
+            />
           </div>
         )}
         <div className="flex items-center justify-between px-2 py-2">

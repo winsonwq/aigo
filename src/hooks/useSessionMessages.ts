@@ -235,7 +235,11 @@ export function useSessionMessages(
   const sendPrompt = useCallback(
     async (
       text: string,
-      options?: { modelRaw?: string; attachmentContext?: string }
+      options?: {
+        modelRaw?: string;
+        attachmentContext?: string;
+        attachmentPaths?: string[];
+      }
     ): Promise<boolean> => {
       if (!sessionId) return false;
       const result = await dispatch(
@@ -244,6 +248,7 @@ export function useSessionMessages(
           text,
           modelRaw: options?.modelRaw,
           attachmentContext: options?.attachmentContext,
+          attachmentPaths: options?.attachmentPaths,
         })
       );
       return sendPromptThunk.fulfilled.match(result) && result.payload;

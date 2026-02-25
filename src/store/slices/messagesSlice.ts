@@ -5,6 +5,10 @@ import {
 } from "@reduxjs/toolkit";
 import type { AppDispatch } from "@/store";
 import type { RootState } from "@/store";
+import {
+  mergePersistedPathsIntoMessages,
+  persistAttachmentPaths,
+} from "@/store/attachmentPathsPersistence";
 import { disconnectOpencode } from "@/store/slices/opencodeSlice";
 import { normalizeModel, readDefaultModel } from "@/config/models";
 
@@ -25,6 +29,8 @@ export type MessageInfo = {
   role: "user" | "assistant";
   time?: { created: number };
   summary?: { title?: string; body?: string };
+  /** 用户消息附件路径（与 attachmentContext 中顺序一致），仅本地保留用于「用系统默认打开」 */
+  attachmentPaths?: string[];
   error?: {
     name?: string;
     data?: { message?: string };
@@ -202,12 +208,13 @@ export const sendPrompt = createAsyncThunk<
     text: string;
     modelRaw?: string;
     attachmentContext?: string;
+    attachmentPaths?: string[];
   },
   { state: RootState; rejectValue: string }
 >(
   "messages/sendPrompt",
   async (
-    { sessionId, text, modelRaw, attachmentContext },
+    { sessionId, text, modelRaw, attachmentContext, attachmentPaths },
     { getState, dispatch, rejectWithValue }
   ) => {
     const client = getState().opencode.client;
@@ -230,12 +237,21 @@ export const sendPrompt = createAsyncThunk<
       : trimmed;
 
     const now = Date.now();
+    if (attachmentPaths?.length) {
+      dispatch(
+        messagesSlice.actions.setPendingAttachmentPaths({
+          sessionId,
+          paths: attachmentPaths,
+        })
+      );
+    }
     const userMsg: MessageWithParts = {
       info: {
         id: `local-user-${now}`,
         sessionID: sessionId,
         role: "user",
         time: { created: now },
+        ...(attachmentPaths?.length ? { attachmentPaths } : {}),
       },
       parts: [{ id: `local-part-${now}`, type: "text", text: trimmed }],
     };
@@ -372,6 +388,8 @@ export const respondToPermission = createAsyncThunk<
 // --- Slice ---
 type MessagesState = {
   messagesBySession: Record<string, MessageWithParts[]>;
+  /** 刚发送的那条用户消息的附件路径，在 fetchMessages 合并到对应消息后清除，避免多次 fetch 覆盖丢失 */
+  pendingAttachmentPathsBySession: Record<string, string[]>;
   loadingSessionIds: Record<string, boolean>;
   errors: Record<string, string>;
   sendErrors: Record<string, string>;
@@ -381,6 +399,7 @@ type MessagesState = {
 
 const initialState: MessagesState = {
   messagesBySession: {},
+  pendingAttachmentPathsBySession: {},
   loadingSessionIds: {},
   errors: {},
   sendErrors: {},
@@ -395,6 +414,7 @@ export const messagesSlice = createSlice({
     clearSession(state, action: PayloadAction<string>) {
       const id = action.payload;
       delete state.messagesBySession[id];
+      delete state.pendingAttachmentPathsBySession[id];
       delete state.loadingSessionIds[id];
       delete state.errors[id];
       delete state.sendErrors[id];
@@ -433,6 +453,13 @@ export const messagesSlice = createSlice({
     ) {
       state.pendingPermission = action.payload;
     },
+    setPendingAttachmentPaths(
+      state,
+      action: PayloadAction<{ sessionId: string; paths: string[] }>
+    ) {
+      const { sessionId, paths } = action.payload;
+      state.pendingAttachmentPathsBySession[sessionId] = paths;
+    },
   },
   extraReducers(builder) {
     builder
@@ -444,7 +471,48 @@ export const messagesSlice = createSlice({
       })
       .addCase(fetchMessages.fulfilled, (state, action) => {
         const { sessionId, messages } = action.payload;
-        state.messagesBySession[sessionId] = messages;
+        const prev = state.messagesBySession[sessionId] ?? [];
+        const pendingPaths = state.pendingAttachmentPathsBySession[sessionId];
+        const lastUserPrevPaths = [...prev]
+          .reverse()
+          .find((m) => m.info.role === "user")?.info?.attachmentPaths;
+        const paths = pendingPaths ?? lastUserPrevPaths;
+        const lastUserIdx = messages.map((m) => m.info.role).lastIndexOf("user");
+
+        let next: MessageWithParts[];
+        if (paths?.length && lastUserIdx !== -1) {
+          next = [...messages];
+          const msg = next[lastUserIdx];
+          next[lastUserIdx] = {
+            ...msg,
+            info: { ...msg.info, attachmentPaths: paths },
+          };
+          delete state.pendingAttachmentPathsBySession[sessionId];
+        } else {
+          next = [...messages];
+        }
+        // 按 id 从 prev 拷回 attachmentPaths，避免后续某次 fetch 用纯 API 结果覆盖导致丢失
+        const prevUserById = new Map(
+          prev
+            .filter((m) => m.info.role === "user" && m.info.attachmentPaths?.length)
+            .map((m) => [m.info.id, m.info.attachmentPaths!])
+        );
+        next = next.map((msg) => {
+          if (msg.info.role !== "user") return msg;
+          const kept = prevUserById.get(msg.info.id);
+          if (!kept?.length) return msg;
+          return {
+            ...msg,
+            info: { ...msg.info, attachmentPaths: kept },
+          };
+        });
+        // reload 后从 localStorage 补全 attachmentPaths，实现「打开」回显
+        next = mergePersistedPathsIntoMessages(
+          sessionId,
+          next
+        ) as MessageWithParts[];
+        persistAttachmentPaths(sessionId, next);
+        state.messagesBySession[sessionId] = next;
         delete state.loadingSessionIds[sessionId];
       })
       .addCase(fetchMessages.rejected, (state, action) => {
