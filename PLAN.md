@@ -18,6 +18,7 @@
 | 6    | （可选）Vercel AI SDK 集成评估与落地                              | 待开始   |
 | 7    | 本地能力扩展：以 SKILL 方式扩展（ffmpeg、whisper、Python/Node、agent browser 等） | 调研中   |
 | 8    | Subagent 输出增强：会话内可见子任务/子 agent 输出                 | 待开始   |
+| 9    | 机器人模式（类 OpenClaw）：远程用户通过 IM 与本地 AI 协作、安全与网管机制 | 调研中   |
 
 ---
 
@@ -142,6 +143,55 @@ OpenCode 会在多路径下检索 `SKILL.md`：[Agent Skills](https://opencode.a
 
 ---
 
+### 9. 机器人模式（类 OpenClaw）：远程用户通过 IM 与本地 AI 协作
+
+**目标**：实现与 OpenClaw 类似的「用户远程通过 IM（如 Telegram 等）与本地 AI 协作」能力，在保证安全与可控的前提下，让 AIGO/OpenCode 作为本地网关，对接 IM 渠道并驱动 OpenCode 会话与工具执行。本阶段以**详尽的调研与结合 OpenCode 特性的方案分析**为主，为后续实现打基础。
+
+**参考**：OpenClaw 文档（[docs.openclaw.ai](https://docs.openclaw.ai)、[docs.clawd.bot](https://docs.clawd.bot)）、安全与网管（[Security](https://docs.clawd.bot/gateway/security)、[Exec Approvals](https://docs.openclaw.ai/tools/exec-approvals)、[Cron](https://docs.openclaw.ai/cli/cron)）；OpenCode 插件/权限/Skills 见 [docs/openwork-reference.md](docs/openwork-reference.md) 与 [opencode.ai/docs](https://opencode.ai/docs/)。**调研报告**：[docs/robot-mode-research.md](docs/robot-mode-research.md)（三部分：OpenClaw 机制、OpenCode 可塑性、落地技术方案与计划）。
+
+#### 9.1 调研一：OpenClaw 侧机制（需详尽）
+
+- [ ] **Bot 机制**：梳理 OpenClaw Gateway 的 bot 架构——如何接收 IM 消息、如何映射到「会话/会话内轮次」、多会话/多用户时的隔离与路由；与 OpenCode 的 session/message 模型如何对应（一对一、多会话 per-user 等）。
+- [ ] **安全机制**：梳理 Gateway 绑定（如仅 loopback `127.0.0.1`）、认证方式（token、密码）、远程访问建议（Tailscale、SSH 隧道）；`openclaw security audit` 与加固项（如 `--fix` 收紧 groupPolicy、目录权限 700 等）；「个人助理」信任边界与多租户不适用性。
+- [ ] **IM 工具网管机制**：各 IM 渠道（如 Telegram）的适配方式、消息入站/出站格式、网管与 Gateway 的职责划分；速率限制、重试、离线队列（若有）；多 channel 时的配置与路由策略。
+- [ ] **本地文件与命令安全防护**：OpenClaw 的 **Exec Approvals**（`deny` / `allowlist` / `full`，以及 `ask`: `always` / `on-miss` / `off`）、审批存储（如 `~/.openclaw/exec-approvals.json`）、per-agent 白名单与 glob 限制；与「本地文件访问」相关的策略（读/写范围、沙箱或路径限制）；safe bins 与防 file-existence oracle 等设计。
+- [ ] **授权与访问控制**：**Pairing** 机制（8 位配对码、过期与待处理数限制）、DM 策略（`pairing` / `open` / `allowlist` / `disabled`）、群组策略（allowlist、requireMention）；凭证与待处理请求的存储（`-allowFrom.json`、`-pairing.json`）；与 AIGO 现有「单机桌面用户」模型的差异及对「远程 IM 用户」的借鉴方式。
+- [ ] **本地 Cron 机制**：Cron 调度在 Gateway 内的位置、持久化（如 `~/.openclaw/cron/jobs.json`）、任务定义（schedule、isolated agent turn vs main session、payload）；与系统命令执行的关系及是否走同一套 Exec Approvals；对「定时触发 AI 任务/提醒」在 AIGO 中的可复用性分析。
+
+#### 9.2 调研二：结合 OpenCode 的可塑性、扩展性与特性
+
+目标是在「不重复造轮子」的前提下，让机器人模式尽量复用 OpenCode 已有能力，并明确 AIGO 需补足的部分。
+
+- [ ] **OpenCode 可塑性/扩展性**：梳理 OpenCode 的 **插件**（事件钩子、本地/项目插件目录、npm 插件）、**MCP**（工具扩展、权限与沙箱）、**Skills**（声明式能力、可含 MCP）；哪些适合作为「IM 触发的任务」的载体（如通过 MCP 暴露「网管收发」、通过插件做 IM 事件→session 的桥接）。
+- [ ] **OpenCode 权限与工具执行**：对照现有 **opencode.json 的 permission**（`allow` / `ask` / `deny`）与 AIGO 已规划的「权限弹窗」；在「远程 IM 用户」场景下，是否需额外层（如 Exec Approvals 式的命令白名单、或与 OpenCode permission 的映射）；文件类工具（edit/write/patch）与本地命令执行在安全模型上的统一表述。
+- [ ] **会话与多端一致性**：OpenCode 的 session/message 模型是否足以支撑「同一会话在桌面 UI 与 IM 双端可见」或「IM 专用会话」；事件流（SSE）、会话列表与标题自动更新在「网管驱动」下的行为；若需「IM 侧只读/限速」，在协议或网关层的切分点。
+- [ ] **与 AIGO 桌面端的关系**：机器人模式作为「同一 OpenCode 实例的又一入口」还是「独立 Gateway 进程」；若共用实例，连接方式（同一 `opencode serve`、同一 DB）、并发与锁；若独立，配置与二进制（sidecar 或独立部署）的取舍。
+- [x] **输出物与文档**：将上述调研结论整理成 **设计文档**（如 `docs/robot-mode-design.md` 或写入 openwork-reference），包含：OpenClaw 机制小结、OpenCode 可复用点、差距与风险、推荐架构（含网管、安全、cron 的职责划分）及分阶段实现建议。（已产出 [docs/robot-mode-research.md](docs/robot-mode-research.md)）
+
+#### 9.3 调研三：落地技术方案与计划
+
+在 9.1、9.2 结论基础上，明确**技术方案**与**实施计划**，写入设计文档并反哺 PLAN 的拆任务与排期。
+
+- [ ] **技术方案**  
+  - **架构选型**：网管服务形态（独立进程 / 内嵌 Tauri / 与 opencode serve 同进程）；与现有 `opencode serve` 的连接方式（本机 HTTP、同一 DB、或网管直调 OpenCode API）；是否复用 OpenClaw 开源实现或自研轻量网关。  
+  - **组件划分**：IM 适配层（按渠道拆模块）、会话路由与映射、安全与授权模块（pairing、allowlist、Exec Approvals 或与 OpenCode permission 的桥接）、Cron 调度器（独立服务或挂到网管）；各组件与 AIGO 桌面端、OpenCode 的边界与接口。  
+  - **技术栈与依赖**：网管/适配层语言与运行时（Node/Rust/其他）；IM 官方 SDK 或协议（如 Telegram Bot API）；配置与持久化（与 `~/.openclaw` 类似的目录约定、或沿用 AIGO 的 app_data_dir）。  
+  - **安全与部署**：默认仅 loopback、认证方式、远程访问推荐（SSH 隧道/Tailscale）；桌面端「启用机器人模式」的开关、首次配对与审计（如 security audit 的落地形式）。
+
+- [ ] **实施计划**  
+  - **阶段划分**：按依赖关系拆成可交付阶段（例如：① 网管骨架 + 单 IM 渠道最小闭环；② 授权与 pairing；③ 命令/文件安全与 Exec 策略；④ Cron；⑤ 多渠道与策略扩展），并标出每阶段的验收标准。  
+  - **优先级与依赖**：哪些依赖 9.1/9.2 的结论、哪些可并行；与 PLAN 其他阶段（如阶段 4 权限弹窗、阶段 7 本地能力）的衔接点。  
+  - **排期或顺序**：在设计文档中给出推荐实施顺序与粗略工作量估计（或标注「待评审后排期」），便于在 PLAN 中插入具体 todo 与里程碑。
+
+- [x] **输出**：将**技术方案**与**实施计划**纳入设计文档；评审通过后，在 PLAN 本节下拆出 9.4 的具体实现任务与自测项。（已纳入 [docs/robot-mode-research.md](docs/robot-mode-research.md) 第三部分）
+
+#### 9.4 后续实现（待调研与方案结论后再拆子任务）
+
+- [ ] 在 9.1～9.3 与设计文档完成后，在 PLAN 中拆出具体实现任务（网管服务、IM 适配、权限/Exec 策略、cron 集成、自测方案等）。
+- [ ] **自测**：随实现阶段补充（如：仅本机可连网管、配对/allowlist 生效、命令执行经审批、cron 触发与 OpenCode 会话一致等）。
+
+---
+
 ## 从 OpenWork 可参考的基础功能（OpenCode Client 使用等）
 
 OpenWork 与 OpenCode 的通信方式、API 用法、可选方案已整理到 **[docs/openwork-reference.md](docs/openwork-reference.md)**，实现阶段可直接对照。此处仅列与「基础功能」相关的、可拆成任务或决策点的项。
@@ -165,4 +215,5 @@ OpenWork 与 OpenCode 的通信方式、API 用法、可选方案已整理到 **
 - **OpenWork 参考**：[different-ai/openwork](https://github.com/different-ai/openwork)；sidecar/安装 [Issue #121](https://github.com/different-ai/openwork/issues/121)；**基础功能与 Client 用法** → [docs/openwork-reference.md](docs/openwork-reference.md)。
 - **本地能力扩展**：阶段 7 以「默认包不增容、以 SKILL 方式出现与扩展」为原则；ffmpeg、whisper、Python/Node、agent browser 等均以 SKILL 封装，应用层只提供通用发现/配置/调用机制，便于未来兼容与独立演进。
 - **Subagent 可见性**：阶段 8 解决当前会话内看不到子任务/子 agent 输出的问题，依赖 OpenCode 事件或消息结构的调研结果。
+- **机器人模式（阶段 9）**：调研分三部分——① OpenClaw 的 bot、安全、IM 网管、本地文件/命令防护、授权、cron；② 结合 OpenCode 的插件/MCP/Skills、权限模型与会话模型；③ **落地技术方案与实施计划**（架构选型、组件划分、阶段与排期）。三部分结论写入设计文档（如 `docs/robot-mode-design.md`）后再拆实现任务。目标为「远程用户通过 IM 与本地 AI 协作」且安全可控。
 - 每完成一个功能块，按 AGENTS.md 中的「AI 自测」要求执行自测并通过后再进入下一阶段。
