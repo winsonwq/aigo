@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { FilePen } from "lucide-react";
 import {
   AssistantCollapsibleBlock,
   getBlockLabel,
@@ -63,7 +64,7 @@ export function FileWriteGroupBlock({
           isRunning={isAnyRunning}
           statusLabel={statusLabel}
           statusVariant={statusVariant}
-          summaryText={summaryPaths || null}
+          summaryText={summaryPaths ? `写入 ${summaryPaths}` : null}
         />
       }
     >
@@ -93,11 +94,12 @@ export function FileWriteGroupBlock({
 
           return (
             <li key={path} className="rounded-md border border-zinc-200/80 dark:border-zinc-600/80">
-              <div className="px-2 py-1.5">
-                <span className="font-medium text-zinc-500 dark:text-zinc-400">{opVerb(op)}</span>{" "}
-                <span className="font-mono text-zinc-700 dark:text-zinc-300">{pathDisplay}</span>
+              <div className="flex items-center gap-2 px-2 py-1.5 text-xs">
+                <FilePen className="h-3 w-3 shrink-0 text-zinc-500 dark:text-zinc-400" />
+                <span className="font-medium text-zinc-500 dark:text-zinc-400">{opVerb(op)}</span>
+                <span className="min-w-0 truncate font-mono text-zinc-700 dark:text-zinc-300">{pathDisplay}</span>
                 {errorMsg != null && (
-                  <span className="ml-1 text-xs text-red-600 dark:text-red-400">（{errorMsg}）</span>
+                  <span className="shrink-0 text-xs text-red-600 dark:text-red-400">（{errorMsg}）</span>
                 )}
               </div>
               {isPathMissing && (

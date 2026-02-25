@@ -31,7 +31,7 @@ export function WebsearchToolBlock({
   const hasError = part.state?.error != null && part.state.error !== "";
   const hasDetails = !!querySummary || resultMarkdown !== "" || hasError;
   const label = getBlockLabel("搜索中", "已搜索", isCalling);
-  const summaryText = querySummary ? `「${String(querySummary)}」` : null;
+  const summaryText = querySummary ? `搜索「${String(querySummary)}」` : null;
 
   return (
     <AssistantCollapsibleBlock

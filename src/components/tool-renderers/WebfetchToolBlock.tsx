@@ -26,6 +26,7 @@ export function WebfetchToolBlock({
   const hasDetails =
     url !== "" || output !== "" || (part.state?.error != null && part.state?.error !== "");
   const label = getBlockLabel("获取中", "已获取", isCalling);
+  const summaryText = url ? `获取 ${url}` : null;
 
   return (
     <AssistantCollapsibleBlock
@@ -37,7 +38,7 @@ export function WebfetchToolBlock({
           isRunning={part.state?.status === "running"}
           statusLabel={statusLabel}
           statusVariant={statusVariant}
-          summaryText={url || null}
+          summaryText={summaryText}
         />
       }
     >
