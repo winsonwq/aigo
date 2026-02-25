@@ -588,10 +588,8 @@ export function Session() {
           )}
         </div>
       </div>
-      {/* 渐变层 z-index:0 在消息区下方，不阻挡点击 */}
-      <div className="absolute bottom-0 left-0 right-0 z-0 h-[180px] bg-gradient-to-t from-[var(--color-bg)] to-transparent pointer-events-none" aria-hidden />
-      {/* 输入表单 z-index:2 在最上层可点击 */}
-      <div className="absolute bottom-0 left-0 right-0 z-[2] px-6 pb-4 pt-24">
+      {/* 整个输入区为 absolute，背景为自下而上的渐变（与页面背景衔接） */}
+      <div className="absolute bottom-0 left-0 right-0 z-[2] bg-gradient-to-t from-[var(--color-bg)] to-transparent px-6 pb-4 pt-24">
         <form
           onSubmit={handleSubmit}
           className="mx-auto w-full max-w-3xl rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700/60 dark:bg-zinc-900"
