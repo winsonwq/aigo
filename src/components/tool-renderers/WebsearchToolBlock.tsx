@@ -1,6 +1,7 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Search } from "lucide-react";
 import {
   AssistantCollapsibleBlock,
   getBlockLabel,
@@ -48,17 +49,25 @@ export function WebsearchToolBlock({
       }
     >
       {hasDetails ? (
-        <div className="space-y-2 px-2 pb-2 pt-1.5">
-          {!!querySummary && (
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">查询：{querySummary}</p>
-          )}
-          {resultMarkdown !== "" && (
-            <div className="max-h-40 overflow-auto rounded-md border border-zinc-200/80 bg-zinc-50/80 p-2 text-sm dark:border-zinc-600/80 dark:bg-zinc-800/80">
-              <div className="prose prose-sm dark:prose-invert max-w-none">
+        <div className="space-y-3 px-2 pb-2 pt-1.5">
+          <div className="rounded-md border border-zinc-200/80 dark:border-zinc-600/80">
+            <div className="flex items-center gap-2 px-2 py-1.5 text-xs">
+              <Search className="h-3 w-3 shrink-0 text-zinc-500 dark:text-zinc-400" />
+              <span className="min-w-0 truncate font-mono text-zinc-700 dark:text-zinc-300">
+                {querySummary ? `搜索「${querySummary}」` : "网页搜索"}
+              </span>
+              {resultMarkdown !== "" && (
+                <span className="shrink-0 text-[10px] text-zinc-500 dark:text-zinc-400">
+                  已返回结果
+                </span>
+              )}
+            </div>
+            {resultMarkdown !== "" && (
+              <div className="max-h-32 overflow-auto border-t border-zinc-200/80 px-2 py-1.5 text-[11px] text-zinc-700 dark:border-zinc-600/80 dark:text-zinc-200 prose prose-sm dark:prose-invert max-w-none">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{resultMarkdown}</ReactMarkdown>
               </div>
-            </div>
-          )}
+            )}
+          </div>
           {hasError && (
             <p className="text-xs text-red-600 dark:text-red-400">{String(part.state?.error)}</p>
           )}
