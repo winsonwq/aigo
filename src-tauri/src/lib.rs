@@ -515,12 +515,27 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("main") {
                 window.open_devtools();
             }
-            // Menu so user can open devtools in built app.
+            // Menu: on macOS the first submenu is shown under the app name (e.g. "AIGO");
+            // subsequent submenus appear as separate menus (Edit, View). We add an app
+            // submenu first so Edit and View show in the menu bar. Edit is required for
+            // Cmd+C/V/X/A to work in the webview.
             let handle = app.handle().clone();
+            let app_submenu = SubmenuBuilder::new(&handle, "AIGO")
+                .about(None)
+                .separator()
+                .quit()
+                .build()?;
+            let edit_submenu = SubmenuBuilder::new(&handle, "Edit")
+                .cut()
+                .copy()
+                .paste()
+                .separator()
+                .select_all()
+                .build()?;
             let view_submenu = SubmenuBuilder::new(&handle, "View")
                 .text("open_devtools", "Toggle Developer Tools")
                 .build()?;
-            let menu = Menu::with_items(&handle, &[&view_submenu])?;
+            let menu = Menu::with_items(&handle, &[&app_submenu, &edit_submenu, &view_submenu])?;
             app.set_menu(menu)?;
             Ok(())
         })
