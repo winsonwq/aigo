@@ -271,6 +271,11 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
           "data-placeholder": placeholder,
         },
         handleKeyDown: (_view, event: KeyboardEvent) => {
+          // 不拦截复制/粘贴/剪切/全选，确保快捷键在界面各处可用
+          if (event.ctrlKey || event.metaKey) {
+            const k = event.key.toLowerCase();
+            if (k === "c" || k === "v" || k === "x" || k === "a") return false;
+          }
           if (event.key === "Enter" && !event.shiftKey) {
             if (event.isComposing) return false;
             event.preventDefault();

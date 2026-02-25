@@ -1,11 +1,11 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ArrowUp, Paperclip, Square, X } from "lucide-react";
 import { MessageInput, type MessageInputRef } from "@/components/MessageInput";
 import {
-  renderToolPart,
+  renderToolSegment,
   type ToolRenderContext,
 } from "@/components/AssistantToolRenderers";
 import { ThinkingBlock } from "@/components/ThinkingBlock";
@@ -203,7 +203,7 @@ function UserMessageBlock({ msg }: { msg: MessageWithParts }) {
   );
 }
 
-/** 助手单轮内的工具调用：通过 renderToolPart 分发到通用/Question 等渲染，stableKey 避免 refetch 后重挂载丢失本地状态 */
+/** 助手单轮内的工具调用：按分组渲染（写文件/读文件/终端/执行计划/向您确认/网络检索/技能等） */
 function AssistantToolCallGroup({
   messageId,
   segmentIndex,
@@ -215,15 +215,7 @@ function AssistantToolCallGroup({
   parts: ToolPart[];
   context: ToolRenderContext;
 }) {
-  return (
-    <div className="tool my-2 flex flex-col gap-1">
-      {parts.map((part, idx) => (
-        <Fragment key={`${messageId}-seg-${segmentIndex}-${idx}`}>
-          {renderToolPart(part, context, `${messageId}-seg-${segmentIndex}-${idx}`)}
-        </Fragment>
-      ))}
-    </div>
-  );
+  return renderToolSegment(parts, context, messageId, segmentIndex);
 }
 
 function MessageBubble({
@@ -554,7 +546,8 @@ export function Session() {
           </p>
         </div>
       )}
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-6">
+      {/* 消息区 z-index:1 确保在渐变层之上，question 选项/提交按钮可点击 */}
+      <div ref={scrollRef} className="relative z-[1] min-h-0 flex-1 overflow-y-auto px-6">
         <div className="mx-auto w-full max-w-3xl pb-[220px]">
           {isLoading && messages.length === 0 ? (
             <p className="text-sm text-zinc-500 dark:text-zinc-400">加载消息…</p>
@@ -595,10 +588,13 @@ export function Session() {
           )}
         </div>
       </div>
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[var(--color-bg)] to-transparent px-6 pb-4 pt-24 pointer-events-none">
+      {/* 渐变层 z-index:0 在消息区下方，不阻挡点击 */}
+      <div className="absolute bottom-0 left-0 right-0 z-0 h-[180px] bg-gradient-to-t from-[var(--color-bg)] to-transparent pointer-events-none" aria-hidden />
+      {/* 输入表单 z-index:2 在最上层可点击 */}
+      <div className="absolute bottom-0 left-0 right-0 z-[2] px-6 pb-4 pt-24">
         <form
           onSubmit={handleSubmit}
-          className="pointer-events-auto mx-auto w-full max-w-3xl rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700/60 dark:bg-zinc-900"
+          className="mx-auto w-full max-w-3xl rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700/60 dark:bg-zinc-900"
         >
           <MessageInput
             ref={messageInputRef}

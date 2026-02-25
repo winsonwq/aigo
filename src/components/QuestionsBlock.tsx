@@ -172,7 +172,7 @@ export function QuestionsBlock({
   const hasSelection = Object.values(selected).some((arr) => arr.length > 0);
 
   return (
-    <div className="questions-block my-3 space-y-6">
+    <div className="questions-block my-3 space-y-6 pointer-events-auto">
       {alreadyAnswered && answerText && (
         <div className="rounded-lg border border-zinc-200 bg-zinc-50 py-2 px-3 text-sm dark:border-zinc-700 dark:bg-zinc-900/50">
           <span className="font-medium text-zinc-600 dark:text-zinc-400">已回答：</span>
@@ -196,7 +196,10 @@ export function QuestionsBlock({
                   key={optIdx}
                   role={isInteractive ? "button" : undefined}
                   tabIndex={isInteractive ? 0 : undefined}
-                  onClick={() => isInteractive && toggleOption(idx, optIdx, !!q.multiple)}
+                  onClick={(e) => {
+                  e.stopPropagation();
+                  if (isInteractive) toggleOption(idx, optIdx, !!q.multiple);
+                }}
                   onKeyDown={(e) => {
                     if (!isInteractive) return;
                     if (e.key === "Enter" || e.key === " ") {
@@ -253,7 +256,10 @@ export function QuestionsBlock({
             variant="default"
             size="sm"
             disabled={!hasSelection || submitting}
-            onClick={() => void handleSubmit()}
+            onClick={(e) => {
+              e.stopPropagation();
+              void handleSubmit();
+            }}
           >
             {submitting ? "发送中…" : "提交答案"}
           </Button>
