@@ -3,6 +3,65 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use tauri::Manager;
+
+const ATTACHMENT_MAX_READ_BYTES: usize = 300 * 1024;
+const ATTACHMENT_EXCERPT_CHARS: usize = 8000;
+
+fn is_likely_text_path(path: &Path) -> bool {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    [
+        "md", "txt", "json", "js", "jsx", "ts", "tsx", "css", "html", "xml", "yaml", "yml",
+        "py", "java", "go", "rs", "sh", "sql",
+    ]
+    .contains(&ext.as_str())
+}
+
+/// Read a file from the given path for use as an attachment. Returns name, size, and optional
+/// text excerpt so the frontend never sends raw paths to OpenCode (which may not resolve Tauri paths).
+#[tauri::command]
+fn read_attachment_file(path: String) -> Result<serde_json::Value, String> {
+    let path_buf = PathBuf::from(path.trim());
+    if !path_buf.is_file() {
+        return Err("不是文件或不存在".to_string());
+    }
+    let name = path_buf
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("file")
+        .to_string();
+    let meta = fs::metadata(&path_buf).map_err(|e| format!("无法读取文件信息: {}", e))?;
+    let size = meta.len();
+
+    let (excerpt, truncated): (Option<String>, bool) = if is_likely_text_path(&path_buf) && size <= ATTACHMENT_MAX_READ_BYTES as u64 {
+        let f = fs::File::open(&path_buf).map_err(|e| format!("无法打开文件: {}", e))?;
+        let mut raw = Vec::with_capacity(ATTACHMENT_MAX_READ_BYTES.min(size as usize));
+        let n = f
+            .take(ATTACHMENT_MAX_READ_BYTES as u64)
+            .read_to_end(&mut raw)
+            .map_err(|e| format!("读取失败: {}", e))?;
+        let byte_truncated = n >= ATTACHMENT_MAX_READ_BYTES || (size as usize) > ATTACHMENT_MAX_READ_BYTES;
+        match String::from_utf8(raw) {
+            Ok(s) => {
+                let excerpt_str: String = s.chars().take(ATTACHMENT_EXCERPT_CHARS).collect();
+                let excerpt_truncated = byte_truncated || s.chars().count() > ATTACHMENT_EXCERPT_CHARS;
+                (Some(excerpt_str), excerpt_truncated)
+            }
+            Err(_) => (None, false),
+        }
+    } else {
+        (None, false)
+    };
+    Ok(serde_json::json!({
+        "name": name,
+        "size": size,
+        "excerpt": excerpt,
+        "truncated": truncated,
+    }))
+}
 use tauri::menu::{Menu, SubmenuBuilder};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_shell::ShellExt;
@@ -482,6 +541,7 @@ pub fn run() {
             kill_process_on_port,
             start_opencode_serve,
             install_skill_from_zip,
+            read_attachment_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

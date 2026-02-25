@@ -9,6 +9,8 @@ import { useOpenCode } from "@/context/OpenCodeContext";
 import { persistDefaultModel, readDefaultModel } from "@/config/models";
 import { useModelOptions } from "@/hooks/useModelOptions";
 import { useSessions } from "@/hooks/useSessions";
+import { invoke } from "@tauri-apps/api/core";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 
 type Attachment = {
   id: string;
@@ -44,8 +46,6 @@ function buildAttachmentContext(attachments: Attachment[]): string {
       lines.push(file.excerpt);
       if (file.truncated) lines.push("...（文件内容过长，已截断）");
       lines.push("```");
-    } else {
-      lines.push("（二进制或较大文件，仅传递文件元信息）");
     }
   });
   return lines.join("\n");
@@ -59,7 +59,6 @@ export function Home() {
   const [input, setInput] = useState("");
   const [selectedModel, setSelectedModel] = useState(() => readDefaultModel());
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const messageInputRef = useRef<MessageInputRef>(null);
@@ -91,7 +90,6 @@ export function Home() {
       setInput("");
       messageInputRef.current?.clearContent();
       setAttachments([]);
-      setAttachmentError(null);
       navigate(`/session/${sessionId}`, {
         replace: false,
         state: {
@@ -114,8 +112,45 @@ export function Home() {
     void doSubmit();
   };
 
-  const handlePickFiles = () => {
-    fileInputRef.current?.click();
+  const isTauri = typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
+
+  const handlePickFiles = async () => {
+    if (isTauri) {
+      try {
+        const paths = await openDialog({
+          multiple: true,
+          directory: false,
+          title: "选择附件",
+        });
+        if (paths === null || (Array.isArray(paths) && paths.length === 0)) return;
+        const pathList = Array.isArray(paths) ? paths : [paths];
+        const next: Attachment[] = [];
+        for (const path of pathList.slice(0, 6)) {
+          try {
+            const r = await invoke<{ name: string; size: number; excerpt?: string; truncated?: boolean }>(
+              "read_attachment_file",
+              { path }
+            );
+            next.push({
+              id: `${r.name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              name: r.name,
+              size: r.size,
+              type: "application/octet-stream",
+              excerpt: r.excerpt,
+              truncated: r.truncated ?? false,
+            });
+          } catch (e) {
+            console.warn("[Home] read_attachment_file failed:", path, e);
+          }
+        }
+        setAttachments((prev) => [...prev, ...next].slice(0, 10));
+      } catch (e) {
+        console.warn("[Home] dialog.open failed, fallback to file input:", e);
+        fileInputRef.current?.click();
+      }
+    } else {
+      fileInputRef.current?.click();
+    }
   };
 
   const handleFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -155,11 +190,6 @@ export function Home() {
       }
     }
     setAttachments((prev) => [...prev, ...next].slice(0, 10));
-    setAttachmentError(
-      list.some((f) => !isLikelyTextFile(f) || f.size > 300 * 1024)
-        ? "部分文件仅附带元信息（非文本或体积较大）。"
-        : null
-    );
     e.target.value = "";
   };
 
@@ -198,9 +228,6 @@ export function Home() {
               </Badge>
             ))}
           </div>
-        )}
-        {attachmentError && (
-          <p className="px-3 pb-2 text-xs text-zinc-500 dark:text-zinc-400">{attachmentError}</p>
         )}
         <div className="flex items-center justify-between px-2 py-2">
           <div className="flex items-center gap-2">

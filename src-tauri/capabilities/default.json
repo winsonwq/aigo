@@ -14,6 +14,7 @@
     "allow-workspace-path",
     "allow-kill-process-on-port",
     "allow-start-opencode-serve",
+    "allow-read-attachment-file",
     {
       "identifier": "shell:allow-execute",
       "allow": [

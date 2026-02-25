@@ -1,0 +1,5 @@
+# 读取用户选择的附件文件内容，避免将 Tauri 下的文件路径直接发给 OpenCode（路径可能无法解析）
+[[permission]]
+identifier = "allow-read-attachment-file"
+description = "Enables read_attachment_file to read selected file content for attachments."
+commands.allow = ["read_attachment_file"]

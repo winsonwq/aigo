@@ -33,6 +33,8 @@ import {
   type ToolPart,
 } from "@/hooks/useSessionMessages";
 import { PermissionDialog } from "@/components/PermissionDialog";
+import { invoke } from "@tauri-apps/api/core";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 
 function isTextPart(p: MessagePart): p is { type: "text"; text?: string; content?: string } {
   return p && typeof p === "object" && "type" in p && p.type === "text";
@@ -132,8 +134,6 @@ function buildAttachmentContext(attachments: Attachment[]): string {
       lines.push(file.excerpt);
       if (file.truncated) lines.push("...（文件内容过长，已截断）");
       lines.push("```");
-    } else {
-      lines.push("（二进制或较大文件，仅传递文件元信息）");
     }
   });
   return lines.join("\n");
@@ -469,7 +469,6 @@ export function Session() {
   const [input, setInput] = useState("");
   const [selectedModel, setSelectedModel] = useState(() => readDefaultModel());
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messageInputRef = useRef<MessageInputRef>(null);
@@ -534,7 +533,6 @@ export function Session() {
     });
     if (ok) {
       setAttachments([]);
-      setAttachmentError(null);
       void refetchSessions();
     }
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -546,8 +544,45 @@ export function Session() {
     await submitCurrentPrompt(text.trim() ? text : undefined);
   };
 
-  const handlePickFiles = () => {
-    fileInputRef.current?.click();
+  const isTauri = typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
+
+  const handlePickFiles = async () => {
+    if (isTauri) {
+      try {
+        const paths = await openDialog({
+          multiple: true,
+          directory: false,
+          title: "选择附件",
+        });
+        if (paths === null || (Array.isArray(paths) && paths.length === 0)) return;
+        const pathList = Array.isArray(paths) ? paths : [paths];
+        const next: Attachment[] = [];
+        for (const path of pathList.slice(0, 6)) {
+          try {
+            const r = await invoke<{ name: string; size: number; excerpt?: string; truncated?: boolean }>(
+              "read_attachment_file",
+              { path }
+            );
+            next.push({
+              id: `${r.name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              name: r.name,
+              size: r.size,
+              type: "application/octet-stream",
+              excerpt: r.excerpt,
+              truncated: r.truncated ?? false,
+            });
+          } catch (e) {
+            console.warn("[Session] read_attachment_file failed:", path, e);
+          }
+        }
+        setAttachments((prev) => [...prev, ...next].slice(0, 10));
+      } catch (e) {
+        console.warn("[Session] dialog.open failed, fallback to file input:", e);
+        fileInputRef.current?.click();
+      }
+    } else {
+      fileInputRef.current?.click();
+    }
   };
 
   const handleFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -582,11 +617,6 @@ export function Session() {
       }
     }
     setAttachments((prev) => [...prev, ...next].slice(0, 10));
-    setAttachmentError(
-      list.some((f) => !isLikelyTextFile(f) || f.size > 300 * 1024)
-        ? "部分文件仅附带元信息（非文本或体积较大）。"
-        : null
-    );
     e.target.value = "";
   };
 
@@ -685,10 +715,10 @@ export function Session() {
           )}
         </div>
       </div>
-      <div className="absolute bottom-0 left-0 right-0 px-6 pb-4">
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[var(--color-bg)] to-transparent px-6 pb-4 pt-24 pointer-events-none">
         <form
           onSubmit={handleSubmit}
-          className="mx-auto w-full max-w-3xl rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700/60 dark:bg-zinc-900"
+          className="pointer-events-auto mx-auto w-full max-w-3xl rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700/60 dark:bg-zinc-900"
         >
           <MessageInput
             ref={messageInputRef}
@@ -714,9 +744,6 @@ export function Session() {
                 </Badge>
               ))}
             </div>
-          )}
-          {attachmentError && (
-            <p className="px-3 pb-2 text-xs text-zinc-500 dark:text-zinc-400">{attachmentError}</p>
           )}
           <div className="flex items-center justify-between px-2 py-2">
             <div className="flex items-center gap-2">
