@@ -75,7 +75,7 @@ export function TabsTrigger({
       aria-selected={isSelected}
       data-state={isSelected ? "active" : "inactive"}
       className={cn(
-        "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-colors",
+        "inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 dark:focus-visible:ring-zinc-700",
         "disabled:pointer-events-none disabled:opacity-50",
         isSelected
