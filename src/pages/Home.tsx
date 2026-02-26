@@ -202,6 +202,9 @@ export function Home() {
           {createError}
         </p>
       )}
+      <p className="mb-4 w-full max-w-3xl text-center text-2xl font-medium text-zinc-300 dark:text-zinc-600">
+        有什么想做的？在这里告诉我吧
+      </p>
       <form
         onSubmit={handleSubmit}
         className="mx-auto w-full max-w-3xl rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700/60 dark:bg-zinc-900"
