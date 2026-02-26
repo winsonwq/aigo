@@ -269,6 +269,9 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
             "message-input-editor min-h-[80px] max-h-[200px] w-full overflow-y-auto bg-transparent px-4 py-3 text-base text-zinc-900 outline-none dark:text-zinc-100 " +
             "[&_p.is-editor-empty:first-child::before]:float-left [&_p.is-editor-empty:first-child::before]:h-0 [&_p.is-editor-empty:first-child::before]:pointer-events-none [&_p.is-editor-empty:first-child::before]:text-zinc-400 [&_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] dark:[&_p.is-editor-empty:first-child::before]:text-zinc-500",
           "data-placeholder": placeholder,
+          autocorrect: "off",
+          autocomplete: "off",
+          spellcheck: "false",
         },
         handleKeyDown: (_view, event: KeyboardEvent) => {
           // 不拦截复制/粘贴/剪切/全选，确保快捷键在界面各处可用
