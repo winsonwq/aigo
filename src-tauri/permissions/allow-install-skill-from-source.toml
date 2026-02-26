@@ -1,0 +1,5 @@
+# Allow the frontend to invoke install_skill_from_source (npx skills add).
+[[permission]]
+identifier = "allow-install-skill-from-source"
+description = "Enables install_skill_from_source to run npx skills add for skill installation."
+commands.allow = ["install_skill_from_source"]

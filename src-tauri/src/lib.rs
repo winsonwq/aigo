@@ -2,7 +2,8 @@
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use tauri::Manager;
+use std::process::Command;
+use tauri::{Emitter, Manager};
 
 const ATTACHMENT_MAX_READ_BYTES: usize = 300 * 1024;
 const ATTACHMENT_EXCERPT_CHARS: usize = 8000;
@@ -503,6 +504,429 @@ fn install_skill_from_zip(
     Ok(skill_name)
 }
 
+/// Strip ANSI escape sequences (e.g. `\x1b[38;5;145m`, `\x1b[0m`) from a string.
+fn strip_ansi(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut bytes = s.bytes().peekable();
+    while let Some(b) = bytes.next() {
+        if b != 0x1b {
+            out.push(char::from(b));
+            continue;
+        }
+        if bytes.peek() != Some(&b'[') {
+            out.push('\x1b');
+            continue;
+        }
+        let _ = bytes.next(); // consume '['
+        while let Some(&b) = bytes.peek() {
+            if b == b'm' || (b'A'..=b'Z').contains(&b) || (b'a'..=b'z').contains(&b) {
+                let _ = bytes.next();
+                break;
+            }
+            let _ = bytes.next();
+        }
+    }
+    out
+}
+
+/// Search skills via `npx skills find <query>`. Parses stdout for owner/repo@skill or owner/repo lines.
+#[tauri::command]
+fn search_skills_via_cli(query: String) -> Result<serde_json::Value, String> {
+    let query = query.trim();
+    if query.is_empty() {
+        return Ok(serde_json::json!({ "items": [], "raw": "" }));
+    }
+    #[cfg(windows)]
+    let output = {
+        let full_cmd = format!("npx skills find \"{}\"", query.replace('"', "\\\""));
+        Command::new("cmd")
+            .args(["/C", &full_cmd])
+            .output()
+            .map_err(|e| format!("执行 npx 失败: {}", e))?
+    };
+    #[cfg(not(windows))]
+    let output = Command::new("npx")
+        .args(["skills", "find", query])
+        .output()
+        .map_err(|e| format!("执行 npx 失败: {}", e))?;
+
+    let raw_stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let raw_stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let mut items: Vec<serde_json::Value> = Vec::new();
+    for line in raw_stdout.lines() {
+        let line = strip_ansi(line).trim().to_string();
+        if line.is_empty() || line.starts_with("Install with") || line.starts_with('└') {
+            continue;
+        }
+        if line.contains('@') {
+            if let Some((source, skill_name)) = line.split_once('@') {
+                let source = source.trim().to_string();
+                let skill_name = skill_name.trim();
+                let skill_name = if let Some(rest) = skill_name.strip_suffix("installs") {
+                    let rest = rest.trim();
+                    let end = rest
+                        .char_indices()
+                        .rev()
+                        .take_while(|(_, c)| c.is_ascii_digit() || c.is_whitespace())
+                        .last()
+                        .map(|(i, _)| i)
+                        .unwrap_or(rest.len());
+                    rest[..end].trim()
+                } else {
+                    skill_name
+                };
+                let skill_name = skill_name.to_string();
+                if source.contains('/') && !source.starts_with("http") {
+                    items.push(serde_json::json!({
+                        "source": source,
+                        "skillName": if skill_name.is_empty() { serde_json::Value::Null } else { serde_json::json!(skill_name) }
+                    }));
+                }
+            }
+        } else if line.contains('/') && !line.starts_with("http") && !line.contains(' ') {
+            let source = line.to_string();
+            items.push(serde_json::json!({ "source": source }));
+        }
+    }
+    if !output.status.success() && items.is_empty() {
+        let err_msg = raw_stderr.trim().to_string();
+        return Err(if err_msg.is_empty() {
+            "npx skills find 执行失败（请确认已安装 Node.js 与 npx）".to_string()
+        } else {
+            format!("npx skills find 执行失败: {}", err_msg)
+        });
+    }
+    Ok(serde_json::json!({
+        "items": items,
+        "raw": raw_stdout
+    }))
+}
+
+const SKILLS_SH_SEARCH_URL: &str = "https://skills.sh/api/search";
+const DEFAULT_SEARCH_QUERY: &str = "skill";
+const SKILLS_SH_PAGE_SIZE: u32 = 50;
+
+#[derive(serde::Deserialize)]
+struct SkillsShHit {
+    source: String,
+    #[serde(alias = "skillId")]
+    skill_id: Option<String>,
+    name: Option<String>,
+    installs: Option<u64>,
+}
+
+#[derive(serde::Deserialize)]
+struct SkillsShSearchResponse {
+    skills: Option<Vec<SkillsShHit>>,
+    count: Option<u32>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SearchResultItem {
+    source: String,
+    skill_name: Option<String>,
+    installs: Option<u64>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SearchSkillsShResult {
+    items: Vec<SearchResultItem>,
+    count: u32,
+    has_more: bool,
+}
+
+/// Search skills via skills.sh public API (no CORS; works in dev and packaged app).
+#[tauri::command]
+fn search_skills_via_api(
+    q: String,
+    limit: Option<u32>,
+    offset: Option<u32>,
+) -> Result<SearchSkillsShResult, String> {
+    let q = q.trim();
+    let q = if q.is_empty() { DEFAULT_SEARCH_QUERY } else { q };
+    let limit = limit.unwrap_or(SKILLS_SH_PAGE_SIZE);
+    let offset = offset.unwrap_or(0);
+
+    let url = format!(
+        "{}?q={}&limit={}&offset={}",
+        SKILLS_SH_SEARCH_URL,
+        urlencoding::encode(q),
+        limit,
+        offset
+    );
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| format!("HTTP 客户端创建失败: {}", e))?;
+    let res = client
+        .get(&url)
+        .send()
+        .map_err(|e| format!("请求 skills.sh 失败: {}", e))?;
+    let status = res.status();
+    let body = res.text().map_err(|e| format!("读取响应失败: {}", e))?;
+    if !status.is_success() {
+        return Err(format!("skills.sh 返回错误: {} {}", status, body));
+    }
+    let data: SkillsShSearchResponse =
+        serde_json::from_str(&body).map_err(|e| format!("解析 skills.sh 响应失败: {}", e))?;
+    let skills = data.skills.unwrap_or_default();
+    let count = data.count.unwrap_or(skills.len() as u32);
+    let items: Vec<SearchResultItem> = skills
+        .into_iter()
+        .map(|h| SearchResultItem {
+            source: h.source,
+            skill_name: h.skill_id.or(h.name),
+            installs: h.installs,
+        })
+        .collect();
+    let has_more = count >= limit;
+    Ok(SearchSkillsShResult {
+        count,
+        has_more,
+        items,
+    })
+}
+
+/// Install a skill via `npx skills add <source> -g -a opencode -y`. Emits install_skill_progress events.
+#[tauri::command]
+fn install_skill_from_source(
+    app: tauri::AppHandle,
+    source: String,
+    skill_name: Option<String>,
+    target: String,
+    project_path: Option<String>,
+) -> Result<(), String> {
+    let source = source.trim();
+    if source.is_empty() {
+        return Err("source 不能为空".to_string());
+    }
+    let _ = app.emit("install_skill_progress", serde_json::json!({ "stage": "cloning" }));
+
+    let mut args = vec!["skills", "add", source];
+    if target == "global" {
+        args.push("-g");
+    }
+    args.extend(["-a", "opencode", "-y"]);
+    if let Some(ref name) = skill_name {
+        if !name.is_empty() {
+            args.push("--skill");
+            args.push(name);
+        }
+    }
+
+    #[cfg(windows)]
+    let output = {
+        let npx_args: Vec<String> = args.iter().map(|s| (*s).to_string()).collect();
+        let cmd_str = std::iter::once("npx".to_string())
+            .chain(npx_args)
+            .collect::<Vec<_>>()
+            .join(" ");
+        Command::new("cmd")
+            .args(["/C", &cmd_str])
+            .current_dir(project_path.as_deref().unwrap_or("."))
+            .output()
+            .map_err(|e| format!("执行 npx 失败: {}", e))?
+    };
+    #[cfg(not(windows))]
+    let output = {
+        let mut cmd = Command::new("npx");
+        cmd.args(&args);
+        if let Some(ref p) = project_path {
+            cmd.current_dir(p);
+        }
+        cmd.output().map_err(|e| format!("执行 npx 失败: {}", e))?
+    };
+
+    let _ = app.emit("install_skill_progress", serde_json::json!({ "stage": "done" }));
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        let err_msg = stderr.trim().to_string();
+        Err(if err_msg.is_empty() {
+            "安装失败（请确认已安装 Node.js 与 npx）".to_string()
+        } else {
+            err_msg
+        })
+    }
+}
+
+/// Sanitize skill name to directory name (alphanumeric, '-', '_' only), same as install_skill_from_zip.
+fn skill_name_to_dir_name(name: &str) -> String {
+    name.chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+/// All allowed global skill roots (OpenCode / npx skills may use any of these).
+fn global_skill_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    if let Some(home) = dirs::home_dir() {
+        // OpenCode / npx skills CLI standard path
+        roots.push(home.join(".config").join("opencode").join("skills"));
+        // Agent-compatible path (~/.agents/skills) used by some installs
+        roots.push(home.join(".agents").join("skills"));
+    }
+    // config_dir: used by our zip install (on macOS this is ~/Library/Application Support)
+    if let Some(config) = dirs::config_dir() {
+        roots.push(config.join("opencode").join("skills"));
+    }
+    roots
+}
+
+/// Returns true if `path` is under one of the allowed skill roots (global config or project .opencode/.agents/skills).
+fn is_allowed_skill_path(path: &Path, project_path: Option<&str>) -> bool {
+    let canonical = match path.canonicalize() {
+        Ok(p) => p,
+        Err(_) => return false,
+    };
+    for root in global_skill_roots() {
+        if root.exists() {
+            if let Ok(prefix) = root.canonicalize() {
+                if canonical.starts_with(&prefix) {
+                    return true;
+                }
+            }
+        }
+    }
+    if let Some(proj) = project_path.filter(|s| !s.is_empty()) {
+        let proj_path = Path::new(proj);
+        for sub in [".opencode/skills", ".agents/skills"] {
+            let root = proj_path.join(sub);
+            if root.exists() {
+                if let Ok(prefix) = root.canonicalize() {
+                    if canonical.starts_with(&prefix) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Uninstall a skill: run `npx skills remove` for project and global scope, then remove skill directory by path if given.
+#[tauri::command]
+fn uninstall_skill(
+    skill_name: String,
+    project_path: Option<String>,
+    skill_location: Option<String>,
+) -> Result<(), String> {
+    let name = skill_name.trim();
+    if name.is_empty() {
+        return Err("skill 名称不能为空".to_string());
+    }
+
+    // 1) Remove from project scope (so project-level install is actually removed)
+    if let Some(ref proj) = project_path {
+        if !proj.is_empty() {
+            let args = ["skills", "remove", name, "-a", "opencode", "-y"];
+            #[cfg(windows)]
+            let output = {
+                let npx_args: Vec<String> = args.iter().map(|s| (*s).to_string()).collect();
+                let cmd_str = std::iter::once("npx".to_string())
+                    .chain(npx_args)
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                Command::new("cmd")
+                    .args(["/C", &cmd_str])
+                    .current_dir(proj)
+                    .output()
+                    .map_err(|e| format!("执行 npx 失败: {}", e))?
+            };
+            #[cfg(not(windows))]
+            let output = {
+                let mut cmd = Command::new("npx");
+                cmd.args(&args).current_dir(proj);
+                cmd.output().map_err(|e| format!("执行 npx 失败: {}", e))?
+            };
+            // Ignore project remove failure (skill might be global-only)
+            let _ = output;
+        }
+    }
+
+    // 2) Remove from global scope
+    let args_global = ["skills", "remove", name, "-g", "-a", "opencode", "-y"];
+    #[cfg(windows)]
+    let _output_global = {
+        let npx_args: Vec<String> = args_global.iter().map(|s| (*s).to_string()).collect();
+        let cmd_str = std::iter::once("npx".to_string())
+            .chain(npx_args)
+            .collect::<Vec<_>>()
+            .join(" ");
+        Command::new("cmd")
+            .args(["/C", &cmd_str])
+            .output()
+            .map_err(|e| format!("执行 npx 失败: {}", e))?
+    };
+    #[cfg(not(windows))]
+    let _output_global = {
+        let mut cmd = Command::new("npx");
+        cmd.args(&args_global);
+        cmd.output().map_err(|e| format!("执行 npx 失败: {}", e))?
+    };
+
+    // 3) Directly remove skill directory: first by path if provided, then by name in all known roots
+    let dir_name = skill_name_to_dir_name(name);
+    let mut dir_names = vec![];
+    if !dir_name.is_empty() {
+        dir_names.push(dir_name.clone());
+        let lower = dir_name.to_lowercase();
+        if lower != dir_name {
+            dir_names.push(lower);
+        }
+    }
+    if let Some(ref loc) = skill_location {
+        let loc = loc.trim();
+        if !loc.is_empty() {
+            let path = Path::new(loc);
+            if path.is_dir()
+                && is_allowed_skill_path(path, project_path.as_deref())
+            {
+                let _ = fs::remove_dir_all(path);
+            }
+            // Use last path component as dir name (actual folder name on disk)
+            if let Some(actual_name) = path.file_name() {
+                if let Some(s) = actual_name.to_str() {
+                    dir_names.push(s.to_string());
+                }
+            }
+        }
+    }
+    // 4) Delete by name in every known root (OpenCode uses ~/.config/opencode/skills; zip uses config_dir)
+    for candidate in dir_names.iter().filter(|s| !s.is_empty()) {
+        for root in global_skill_roots() {
+            if root.exists() {
+                let skill_dir = root.join(candidate);
+                if skill_dir.is_dir() {
+                    let _ = fs::remove_dir_all(&skill_dir);
+                }
+            }
+        }
+        if let Some(proj) = project_path.as_deref().filter(|s| !s.is_empty()) {
+            let proj_path = Path::new(proj);
+            for sub in [".opencode/skills", ".agents/skills"] {
+                let skill_dir = proj_path.join(sub).join(candidate);
+                if skill_dir.is_dir() {
+                    let _ = fs::remove_dir_all(&skill_dir);
+                }
+            }
+        }
+    }
+
+    // We have already tried physical delete (by path and by name in known roots); treat as success so UI stays in sync.
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -556,6 +980,10 @@ pub fn run() {
             kill_process_on_port,
             start_opencode_serve,
             install_skill_from_zip,
+            search_skills_via_cli,
+            search_skills_via_api,
+            install_skill_from_source,
+            uninstall_skill,
             read_attachment_file,
         ])
         .run(tauri::generate_context!())

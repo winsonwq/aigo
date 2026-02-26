@@ -1,0 +1,5 @@
+# Allow the frontend to invoke uninstall_skill (npx skills remove).
+[[permission]]
+identifier = "allow-uninstall-skill"
+description = "Enables uninstall_skill to run npx skills remove for skill uninstallation."
+commands.allow = ["uninstall_skill"]

@@ -12,11 +12,14 @@ export function useSkills(directory?: string) {
   const error = useSelector((s: RootState) => s.skills.error);
 
   const refetch = useCallback(() => {
-    void dispatch(fetchSkills(directory));
+    return dispatch(fetchSkills(directory));
   }, [dispatch, directory]);
 
   useEffect(() => {
-    void dispatch(fetchSkills(directory));
+    const id = setTimeout(() => {
+      void dispatch(fetchSkills(directory));
+    }, 0);
+    return () => clearTimeout(id);
   }, [directory, dispatch]);
 
   return { skills, isLoading, error, refetch };

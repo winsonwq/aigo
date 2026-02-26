@@ -1,0 +1,5 @@
+# Allow the frontend to invoke search_skills_via_cli (npx skills find).
+[[permission]]
+identifier = "allow-search-skills-via-cli"
+description = "Enables search_skills_via_cli to run npx skills find for skill discovery."
+commands.allow = ["search_skills_via_cli"]

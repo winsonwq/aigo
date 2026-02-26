@@ -1,0 +1,5 @@
+# Allow the frontend to invoke search_skills_via_api (HTTP request to skills.sh from backend, avoids CORS).
+[[permission]]
+identifier = "allow-search-skills-via-api"
+description = "Enables search_skills_via_api to fetch skills.sh search API from the backend."
+commands.allow = ["search_skills_via_api"]
