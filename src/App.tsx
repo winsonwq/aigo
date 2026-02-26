@@ -4,6 +4,7 @@ import { store } from "@/store";
 import { WorkspaceProvider } from "@/context/WorkspaceContext";
 import { OpenCodeProvider } from "@/context/OpenCodeContext";
 import { ConfirmModalProvider } from "@/components/ConfirmModal";
+import { Toaster } from "@/components/ui/sonner";
 import { Layout } from "@/components/Layout";
 import { Home } from "@/pages/Home";
 import { Session } from "@/pages/Session";
@@ -29,6 +30,7 @@ function App() {
                 </Route>
               </Routes>
             </BrowserRouter>
+            <Toaster />
           </ConfirmModalProvider>
         </OpenCodeProvider>
       </WorkspaceProvider>

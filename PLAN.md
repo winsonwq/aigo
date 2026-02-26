@@ -14,7 +14,7 @@
 | 2    | OpenCode 下载与 builtin 启动、自动连接                            | 进行中   |
 | 3    | UI 体系：Shadcn/ui、Layout、Sidebar、Menu、Router、Icons          | 完成     |
 | 4    | OpenCode Client SDK 集成：事件监听、消息/工具展示、react-markdown | 进行中   |
-| 5    | Skills 管理：当前 skills 列表、zip 安装、builtin 列表与远程一键安装、打开文件夹 | 基本完成 |
+| 5    | Skills 管理：当前 skills 列表、zip 安装、全面兼容 skills.sh（搜索、安装、进度条）、打开文件夹 | 完成     |
 | 6    | （可选）Vercel AI SDK 集成评估与落地                              | 待开始   |
 | 7    | 本地能力扩展：以 SKILL 方式扩展（ffmpeg、whisper、Python/Node、agent browser 等） | 调研中   |
 | 8    | Subagent 输出增强：会话内可见子任务/子 agent 输出                 | 待开始   |
@@ -82,24 +82,23 @@ OpenCode 事件参考：[插件 (Plugins)](https://www.opencodecn.com/docs/plugi
 
 ---
 
-### 5. Skills 管理：查看当前检索到的 skills、通过 zip 安装、builtin 与安装流程
+### 5. Skills 管理：全面兼容 skills.sh（搜索、安装、进度条）
 
 OpenCode 会在多路径下检索 `SKILL.md`：[Agent Skills](https://opencode.ai/docs/skills/)
 
 - 项目：`.opencode/skills/<name>/SKILL.md`、`.claude/skills/<name>/SKILL.md`、`.agents/skills/<name>/SKILL.md`
 - 全局：`~/.config/opencode/skills/<name>/SKILL.md`、`~/.claude/skills/`、`~/.agents/skills/`  
-  每个 skill 为目录，内含 `SKILL.md`，且需 YAML frontmatter：`name`（必填）、`description`（必填）。OpenWork 有 Skills Manager：列表展示、从包安装、导入本地目录；可参考 [different-ai/openwork](https://github.com/different-ai/openwork)。
-
-**SKILL 安装作为综合性流程**：安装可能包含**下载**（zip、或依赖的大文件如 Whisper 模型）、**安装/解压/校验**等多步。需统一支持：下载阶段**进度条**（尤其大文件）、各阶段状态展示、失败回滚与提示，以便普通 zip 与「带大体积依赖」的 SKILL（如本地 Whisper）都能有清晰体验。
+  每个 skill 为目录，内含 `SKILL.md`，且需 YAML frontmatter：`name`（必填）、`description`（必填）。与 [skills.sh](https://skills.sh/) 兼容：通过 **npx skills find** 搜索、**npx skills add** 安装；安装过程支持阶段式进度；若 skill 声明 `resources`（大文件如 Whisper 模型），可做 HTTP 流式下载与精确进度条（后续扩展）。
 
 - [x] **Skills 页面**：在路由中增加 **Skills 管理** 页（如 `/skills`），Sidebar 增加入口（图标 + 「Skills」）。（已实现）
 - [x] **「当前检索到的 skills」**：实现「当前会被 OpenCode 检索到的 skills」列表。数据来自 `client.app.skills()`，服务端聚合各路径下 SKILL.md。（已实现：`useSkills` + Skills 页列表）
 - [x] **列表 UI**：卡片展示 skill 的 name、description、路径/来源；支持按名称/描述/路径搜索筛选；每项支持**打开所在文件夹**（`openPath(location)`）。（已实现）
 - [x] **通过 zip 安装**：提供「从 zip 安装」入口（按钮 + 文件选择）。选择 zip 后由 Tauri 命令 `install_skill_from_zip` 解压到目标目录（全局 `~/.config/opencode/skills/<name>/` 或用户选的项目目录 `.opencode/skills/<name>/`）；解压后校验 SKILL.md 与 frontmatter，失败则清理并提示。（已实现）
 - [x] **zip 格式约定**：UI 文案说明 zip 内需包含 SKILL.md 且含 name、description 的 YAML frontmatter；支持 zip 根目录即 SKILL.md 或单层子目录内含 SKILL.md。（已实现）
-- [ ] **Builtin SKILL 列表与一键安装**：维护一份**内置展示的 SKILL 列表**（builtin catalog）——这些 SKILL 未安装时也在 Skills 页显示（name、description、来源「可安装」），右侧**安装**按钮。点击后按配置的远程地址拉取并安装；manifest 描述各 builtin 的 id、name、description、zip 下载 URL（及可选依赖资源如模型 URL）。
-- [ ] **安装流程与进度展示**：将 SKILL 安装做成**多阶段流程**：下载（含大文件）→ 解压/安装 → 校验。**下载阶段**需展示**进度条**（已下载量/总量、百分比），支持暂停/取消（可选）；安装与校验阶段展示当前步骤与结果。这样既适用于小体积 zip，也适用于依赖大文件的 SKILL（如 Whisper 类需额外下载模型）。失败时清理已下载/已解压内容并提示；成功后刷新「当前检索到的 skills」列表。
-- [ ] **自测**：在空目录下「当前 skills」为空或仅系统默认；放入一个合法 skill 目录后列表出现该 skill；用 zip（含 SKILL.md + 合法 frontmatter）安装后列表更新且 OpenCode 能检索到；非法 zip 或缺少 SKILL.md 时提示错误且不破坏已有 skills；点击「打开所在文件夹」能打开系统文件管理器；**builtin 列表中未安装的 skill 显示安装按钮，点击后从远程下载并安装成功，安装后出现在「当前检索到的 skills」中**；**安装过程中（含大文件下载）有进度条与阶段提示，失败有明确提示**。（列表、zip 安装、打开文件夹已实现，待做完整自测闭环）
+- [x] **全面兼容 skills.sh：搜索**：Tauri 命令 `search_skills_via_cli(query)` 调用 `npx skills find <query>` 并解析 stdout，前端展示结果列表，每项右侧「安装」按钮；支持「在 skills.sh 中打开」链接。（已实现）
+- [x] **全面兼容 skills.sh：安装**：Tauri 命令 `install_skill_from_source` 调用 `npx skills add ... -g -a opencode -y`（及可选 `--skill`）；内置 catalog 精选列表 + 粘贴 owner/repo 或 URL 安装；已安装项根据 `client.app.skills()` 判断，显示「已安装」。（已实现）
+- [x] **安装流程与进度展示**：CLI 安装用阶段式进度（`install_skill_progress` 事件：准备 → 克隆/安装中 → 校验）；大文件/依赖资源用 HTTP 下载 + 精确进度条（bytes/total）为后续可扩展。（已实现阶段式进度）
+- [ ] **自测**：搜索 → 结果列表带安装按钮；从 catalog 或粘贴 source 点击安装 → 阶段进度 → 成功并出现在已安装列表；未装 Node 时明确错误提示；带 resources 的 skill 下载阶段精确进度条（待实现 resources 下载后补充自测）。
 
 ---
 
