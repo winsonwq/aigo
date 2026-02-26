@@ -2,7 +2,9 @@
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::sync::mpsc;
+use std::time::Duration;
 use tauri::{Emitter, Manager};
 
 const ATTACHMENT_MAX_READ_BYTES: usize = 300 * 1024;
@@ -284,6 +286,46 @@ fn find_opencode_binary() -> PathBuf {
     PathBuf::from(name)
 }
 
+/// Resolve npx binary path (for npx skills add on Windows). On Unix we run npx via login shell instead.
+#[cfg(windows)]
+fn find_npx_binary() -> PathBuf {
+    let name = if cfg!(windows) { "npx.cmd" } else { "npx" };
+
+    // 1. Try env PATH
+    if let Ok(path_var) = std::env::var("PATH") {
+        for dir in std::env::split_paths(&path_var) {
+            let candidate = dir.join(name);
+            if candidate.is_file() {
+                return candidate;
+            }
+        }
+    }
+
+    // 2. Common install paths (Homebrew / system)
+    #[cfg(target_os = "macos")]
+    let extra_dirs: &[&str] = &["/opt/homebrew/bin", "/usr/local/bin"];
+    #[cfg(target_os = "linux")]
+    let extra_dirs: &[&str] = &["/usr/local/bin", "/usr/bin"];
+    #[cfg(windows)]
+    let extra_dirs: &[&str] = &[];
+
+    #[cfg(unix)]
+    for dir in extra_dirs {
+        let candidate = PathBuf::from(dir).join(name);
+        if candidate.is_file() {
+            return candidate;
+        }
+    }
+
+    // 3. Login shell PATH (nvm/fnm from .zprofile etc.)
+    #[cfg(unix)]
+    if let Some(path) = which_via_login_shell("npx") {
+        return path;
+    }
+
+    PathBuf::from(name)
+}
+
 /// Start OpenCode serve in the background. Prefers bundled sidecar (binaries/opencode); falls back to PATH or common install paths.
 /// Returns "sidecar" if the bundled binary was used, "path" if the system opencode was used.
 #[tauri::command]
@@ -379,10 +421,8 @@ fn parse_skill_frontmatter(content: &str) -> Option<(String, String)> {
     Some((name, description))
 }
 
-/// Install a skill from a zip file. Target: "global" (~/.config/opencode/skills/<name>) or "project" (project_path/.opencode/skills/<name>).
-/// Zip must contain SKILL.md with YAML frontmatter name + description. On failure, cleans up partial dir.
-#[tauri::command]
-fn install_skill_from_zip(
+/// Sync implementation of zip install (run in spawn_blocking so UI stays responsive).
+fn install_skill_from_zip_sync(
     zip_path: String,
     target: String,
     project_path: Option<String>,
@@ -502,6 +542,18 @@ fn install_skill_from_zip(
     }
 
     Ok(skill_name)
+}
+
+/// Install a skill from a zip file. Target: "global" or "project". Runs in a blocking task so the UI stays responsive.
+#[tauri::command]
+async fn install_skill_from_zip(
+    zip_path: String,
+    target: String,
+    project_path: Option<String>,
+) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || install_skill_from_zip_sync(zip_path, target, project_path))
+        .await
+        .map_err(|e| format!("安装任务失败: {}", e))?
 }
 
 /// Strip ANSI escape sequences (e.g. `\x1b[38;5;145m`, `\x1b[0m`) from a string.
@@ -638,34 +690,40 @@ struct SearchSkillsShResult {
 }
 
 /// Search skills via skills.sh public API (no CORS; works in dev and packaged app).
+/// Uses async HTTP so the Rust runtime is not blocked and the frontend stays responsive.
 #[tauri::command]
-fn search_skills_via_api(
+async fn search_skills_via_api(
     q: String,
     limit: Option<u32>,
     offset: Option<u32>,
 ) -> Result<SearchSkillsShResult, String> {
     let q = q.trim();
-    let q = if q.is_empty() { DEFAULT_SEARCH_QUERY } else { q };
+    let q = if q.is_empty() {
+        DEFAULT_SEARCH_QUERY.to_string()
+    } else {
+        q.to_string()
+    };
     let limit = limit.unwrap_or(SKILLS_SH_PAGE_SIZE);
     let offset = offset.unwrap_or(0);
 
     let url = format!(
         "{}?q={}&limit={}&offset={}",
         SKILLS_SH_SEARCH_URL,
-        urlencoding::encode(q),
+        urlencoding::encode(&q),
         limit,
         offset
     );
-    let client = reqwest::blocking::Client::builder()
+    let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| format!("HTTP 客户端创建失败: {}", e))?;
     let res = client
         .get(&url)
         .send()
+        .await
         .map_err(|e| format!("请求 skills.sh 失败: {}", e))?;
     let status = res.status();
-    let body = res.text().map_err(|e| format!("读取响应失败: {}", e))?;
+    let body = res.text().await.map_err(|e| format!("读取响应失败: {}", e))?;
     if !status.is_success() {
         return Err(format!("skills.sh 返回错误: {} {}", status, body));
     }
@@ -689,9 +747,67 @@ fn search_skills_via_api(
     })
 }
 
-/// Install a skill via `npx skills add <source> -g -a opencode -y`. Emits install_skill_progress events.
-#[tauri::command]
-fn install_skill_from_source(
+/// Get PATH from login shell with a short timeout. If shell hangs (e.g. in GUI without TTY), we fall back to current env PATH.
+#[cfg(unix)]
+fn get_path_via_shell_with_timeout(secs: u64) -> String {
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let shell = std::env::var("SHELL").ok().filter(|s| !s.is_empty());
+        let shell = shell.as_deref().unwrap_or("/bin/zsh");
+        let out = Command::new(shell)
+            .args(["-lc", "printf '%s' \"$PATH\""])
+            .stdin(Stdio::null())
+            .output();
+        if let Ok(o) = out {
+            if o.status.success() {
+                let _ = tx.send(String::from_utf8_lossy(&o.stdout).trim().to_string());
+            }
+        }
+    });
+    rx.recv_timeout(Duration::from_secs(secs))
+        .unwrap_or_else(|_| std::env::var("PATH").unwrap_or_default())
+}
+
+/// Find npx binary in a PATH string (colon-separated on Unix). Also checks common install dirs.
+#[cfg(unix)]
+fn find_npx_in_path(path_str: &str) -> PathBuf {
+    let name = "npx";
+    for dir in std::env::split_paths(path_str) {
+        let candidate = dir.join(name);
+        if candidate.is_file() {
+            return candidate;
+        }
+    }
+    for dir in &["/opt/homebrew/bin", "/usr/local/bin"] {
+        let candidate = PathBuf::from(dir).join(name);
+        if candidate.is_file() {
+            return candidate;
+        }
+    }
+    PathBuf::from(name)
+}
+
+/// Run npx on Unix: get PATH from shell (with timeout to avoid hang in GUI), then run npx directly with that PATH so we never run npx inside a shell.
+#[cfg(unix)]
+fn run_npx_unix(args: &[&str], project_path: Option<&str>) -> Result<std::process::Output, String> {
+    let path_env = get_path_via_shell_with_timeout(5);
+    let npx_bin = find_npx_in_path(&path_env);
+    let mut cmd = Command::new(&npx_bin);
+    cmd.args(args)
+        .stdin(Stdio::null())
+        .env("PATH", &path_env)
+        .env("CI", "true")
+        .env("npm_config_yes", "true")
+        .env("NPX_YES", "true");
+    if let Some(p) = project_path.filter(|s| !s.is_empty()) {
+        cmd.current_dir(p);
+    }
+    cmd.output().map_err(|e| format!("执行 npx 失败: {}", e))
+}
+
+/// Sync implementation of npx skills add (run in spawn_blocking so UI stays responsive).
+/// On Unix runs npx via login shell so PATH/env match terminal and npx doesn't hang in GUI.
+fn install_skill_from_source_sync(
     app: tauri::AppHandle,
     source: String,
     skill_name: Option<String>,
@@ -702,9 +818,8 @@ fn install_skill_from_source(
     if source.is_empty() {
         return Err("source 不能为空".to_string());
     }
-    let _ = app.emit("install_skill_progress", serde_json::json!({ "stage": "cloning" }));
 
-    let mut args = vec!["skills", "add", source];
+    let mut args: Vec<&str> = vec!["skills", "add", source];
     if target == "global" {
         args.push("-g");
     }
@@ -712,46 +827,91 @@ fn install_skill_from_source(
     if let Some(ref name) = skill_name {
         if !name.is_empty() {
             args.push("--skill");
-            args.push(name);
+            args.push(name.as_str());
         }
     }
 
     #[cfg(windows)]
     let output = {
+        let npx_bin = find_npx_binary();
         let npx_args: Vec<String> = args.iter().map(|s| (*s).to_string()).collect();
-        let cmd_str = std::iter::once("npx".to_string())
+        let cmd_str = std::iter::once(npx_bin.to_string_lossy().to_string())
             .chain(npx_args)
             .collect::<Vec<_>>()
             .join(" ");
         Command::new("cmd")
             .args(["/C", &cmd_str])
             .current_dir(project_path.as_deref().unwrap_or("."))
+            .stdin(Stdio::null())
             .output()
             .map_err(|e| format!("执行 npx 失败: {}", e))?
     };
-    #[cfg(not(windows))]
-    let output = {
-        let mut cmd = Command::new("npx");
-        cmd.args(&args);
-        if let Some(ref p) = project_path {
-            cmd.current_dir(p);
-        }
-        cmd.output().map_err(|e| format!("执行 npx 失败: {}", e))?
-    };
+    #[cfg(unix)]
+    let output = run_npx_unix(&args, project_path.as_deref())?;
 
     let _ = app.emit("install_skill_progress", serde_json::json!({ "stage": "done" }));
 
     if output.status.success() {
         Ok(())
     } else {
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        let err_msg = stderr.trim().to_string();
-        Err(if err_msg.is_empty() {
-            "安装失败（请确认已安装 Node.js 与 npx）".to_string()
+        let stderr_raw = String::from_utf8_lossy(&output.stderr).to_string();
+        let stdout_raw = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = strip_ansi(&stderr_raw).trim().to_string();
+        let stdout = strip_ansi(&stdout_raw);
+        let code = output.status.code().unwrap_or(-1);
+        let err_msg = if !stderr.is_empty() {
+            stderr
         } else {
-            err_msg
-        })
+            // npx skills often prints errors to stdout (below the logo); take last meaningful line or line containing error keywords
+            let lines: Vec<&str> = stdout.lines().map(str::trim).filter(|s| !s.is_empty()).collect();
+            let error_line = lines
+                .iter()
+                .rev()
+                .find(|s| {
+                    let lower = s.to_lowercase();
+                    lower.contains("failed")
+                        || lower.contains("error")
+                        || lower.contains("not found")
+                        || lower.contains("permitted")
+                        || s.contains('■')
+                        || lower.contains("canceled")
+                })
+                .or_else(|| lines.last())
+                .map(|s| (*s).to_string())
+                .unwrap_or_else(|| {
+                    if stdout.trim().is_empty() {
+                        "请确认已安装 Node.js 与 npx，并检查网络后重试。".to_string()
+                    } else {
+                        lines.last().map(|s| (*s).to_string()).unwrap_or_default()
+                    }
+                });
+            if error_line.is_empty() {
+                "请确认已安装 Node.js 与 npx，并检查网络后重试。".to_string()
+            } else {
+                error_line
+            }
+        };
+        Err(format!("安装失败（exit code: {}）。{}", code, err_msg))
     }
+}
+
+/// Install a skill via `npx skills add <source> -g -a opencode -y`. Emits install_skill_progress events.
+/// Runs in spawn_blocking so the UI stays responsive during install.
+#[tauri::command]
+async fn install_skill_from_source(
+    app: tauri::AppHandle,
+    source: String,
+    skill_name: Option<String>,
+    target: String,
+    project_path: Option<String>,
+) -> Result<(), String> {
+    let _ = app.emit("install_skill_progress", serde_json::json!({ "stage": "cloning" }));
+
+    tokio::task::spawn_blocking(move || {
+        install_skill_from_source_sync(app, source, skill_name, target, project_path)
+    })
+    .await
+    .map_err(|e| format!("安装任务失败: {}", e))?
 }
 
 /// Sanitize skill name to directory name (alphanumeric, '-', '_' only), same as install_skill_from_zip.
@@ -815,8 +975,9 @@ fn is_allowed_skill_path(path: &Path, project_path: Option<&str>) -> bool {
 }
 
 /// Uninstall a skill: run `npx skills remove` for project and global scope, then remove skill directory by path if given.
+/// Uses async process so the UI stays responsive.
 #[tauri::command]
-fn uninstall_skill(
+async fn uninstall_skill(
     skill_name: String,
     project_path: Option<String>,
     skill_location: Option<String>,
@@ -837,17 +998,18 @@ fn uninstall_skill(
                     .chain(npx_args)
                     .collect::<Vec<_>>()
                     .join(" ");
-                Command::new("cmd")
+                tokio::process::Command::new("cmd")
                     .args(["/C", &cmd_str])
                     .current_dir(proj)
                     .output()
+                    .await
                     .map_err(|e| format!("执行 npx 失败: {}", e))?
             };
             #[cfg(not(windows))]
             let output = {
-                let mut cmd = Command::new("npx");
+                let mut cmd = tokio::process::Command::new("npx");
                 cmd.args(&args).current_dir(proj);
-                cmd.output().map_err(|e| format!("执行 npx 失败: {}", e))?
+                cmd.output().await.map_err(|e| format!("执行 npx 失败: {}", e))?
             };
             // Ignore project remove failure (skill might be global-only)
             let _ = output;
@@ -863,16 +1025,17 @@ fn uninstall_skill(
             .chain(npx_args)
             .collect::<Vec<_>>()
             .join(" ");
-        Command::new("cmd")
+        tokio::process::Command::new("cmd")
             .args(["/C", &cmd_str])
             .output()
+            .await
             .map_err(|e| format!("执行 npx 失败: {}", e))?
     };
     #[cfg(not(windows))]
     let _output_global = {
-        let mut cmd = Command::new("npx");
+        let mut cmd = tokio::process::Command::new("npx");
         cmd.args(&args_global);
-        cmd.output().map_err(|e| format!("执行 npx 失败: {}", e))?
+        cmd.output().await.map_err(|e| format!("执行 npx 失败: {}", e))?
     };
 
     // 3) Directly remove skill directory: first by path if provided, then by name in all known roots

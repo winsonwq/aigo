@@ -20,7 +20,7 @@ import {
 } from "@/api/skillsSh";
 import { toast } from "@/components/ui/sonner";
 import { useDispatch } from "react-redux";
-import { skillsSlice } from "@/store/slices/skillsSlice";
+import { fetchSkills, skillsSlice } from "@/store/slices/skillsSlice";
 
 export function Skills() {
   const dispatch = useDispatch();
@@ -66,13 +66,37 @@ export function Skills() {
     return (nameOrSkill: string) => names.has(nameOrSkill.toLowerCase());
   }, [skills]);
 
+  /** 进入 Skills 页后延后拉取已安装列表，用于显示 tab「已安装 N」数字；连接建立后也拉取一次 */
   useEffect(() => {
-    const unlisten = listen<{ stage: string }>("install_skill_progress", (ev) => {
+    let cancelled = false;
+    const rafId = requestAnimationFrame(() => {
+      const t = setTimeout(() => {
+        if (!cancelled) void refetch();
+      }, 0);
+      return () => clearTimeout(t);
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+    };
+  }, [refetch]);
+
+  /** OpenCode 连接上时拉取已安装列表（可能进页时尚未连接） */
+  useEffect(() => {
+    if (!isConnected) return;
+    void refetch();
+  }, [isConnected, refetch]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const unlistenPromise = listen<{ stage: string }>("install_skill_progress", (ev) => {
+      if (cancelled) return;
       const stage = ev.payload?.stage ?? "";
       setInstallStage(stage === "cloning" ? "克隆/安装中…" : stage === "done" ? "校验…" : stage);
     });
     return () => {
-      void unlisten.then((fn) => fn());
+      cancelled = true;
+      unlistenPromise.then((fn) => { if (typeof fn === "function") fn(); }).catch(() => {});
     };
   }, []);
 
@@ -123,22 +147,28 @@ export function Skills() {
     []
   );
 
-  /** 进入「搜索」tab 后再加载默认列表，避免点击菜单时卡顿 */
+  /** 首帧后再请求搜索，避免 Tauri invoke 阻塞首帧（mount→首帧曾达 ~1s） */
   useEffect(() => {
     if (activeTab !== "search" || searchInitialLoadDoneRef.current) return;
-    const id = setTimeout(() => {
-      searchInitialLoadDoneRef.current = true;
-      setSearchLoading(true);
-      searchSkillsShApi({ q: DEFAULT_SEARCH_QUERY, limit: SKILLS_SH_PAGE_SIZE, offset: 0 })
-        .then((res) => {
-          setSearchResults(res.items);
-          setCurrentSearchQuery(DEFAULT_SEARCH_QUERY);
-          setHasMore(res.hasMore);
-        })
-        .catch((e) => setSearchError(e instanceof Error ? e.message : String(e)))
-        .finally(() => setSearchLoading(false));
-    }, 0);
-    return () => clearTimeout(id);
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const rafId = requestAnimationFrame(() => {
+      timeoutId = setTimeout(() => {
+        searchInitialLoadDoneRef.current = true;
+        setSearchLoading(true);
+        searchSkillsShApi({ q: DEFAULT_SEARCH_QUERY, limit: SKILLS_SH_PAGE_SIZE, offset: 0 })
+          .then((res) => {
+            setSearchResults(res.items);
+            setCurrentSearchQuery(DEFAULT_SEARCH_QUERY);
+            setHasMore(res.hasMore);
+          })
+          .catch((e) => setSearchError(e instanceof Error ? e.message : String(e)))
+          .finally(() => setSearchLoading(false));
+      }, 0);
+    });
+    return () => {
+      cancelAnimationFrame(rafId);
+      if (timeoutId != null) clearTimeout(timeoutId);
+    };
   }, [activeTab]);
 
   async function handleSearchSkillsSh() {
@@ -184,9 +214,11 @@ export function Skills() {
       });
       toast.success("安装成功");
       if (skillName) dispatch(skillsSlice.actions.clearRecentlyRemovedSkill(skillName));
-      await refetch();
-      await new Promise((r) => setTimeout(r, 500));
-      await refetch();
+      // 安装到全局，拉取全局列表并给 OpenCode 一点时间扫描新文件
+      await new Promise((r) => setTimeout(r, 800));
+      await dispatch(fetchSkills(undefined));
+      await new Promise((r) => setTimeout(r, 300));
+      await dispatch(fetchSkills(undefined));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -213,9 +245,10 @@ export function Skills() {
       });
       toast.success("安装成功");
       if (installedName) dispatch(skillsSlice.actions.clearRecentlyRemovedSkill(installedName));
-      await refetch();
-      await new Promise((r) => setTimeout(r, 500));
-      await refetch();
+      await new Promise((r) => setTimeout(r, 800));
+      await dispatch(fetchSkills(undefined));
+      await new Promise((r) => setTimeout(r, 300));
+      await dispatch(fetchSkills(undefined));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -331,71 +364,71 @@ export function Skills() {
                 </div>
               ) : searchResults.length > 0 ? (
                 <List>
-                  {searchResults.map((item, i) => {
-                    const key = `search:${item.source}${item.skillName ? `@${item.skillName}` : ""}`;
-                    const displayName = item.skillName ?? item.source;
-                    const busy = installingKey === key;
-                    const installed = item.skillName ? isInstalled(item.skillName) : false;
-                    return (
-                      <ListRow key={`${key}-${i}`}>
-                        <div className="min-w-0 flex-1 flex items-center gap-3">
-                          <span className="font-medium text-zinc-900 dark:text-zinc-100 truncate" title={displayName}>
-                            {displayName}
-                          </span>
-                          <span className="text-sm text-zinc-500 dark:text-zinc-400 truncate shrink-0 max-w-[40%]" title={item.source}>
-                            {item.source}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {typeof item.installs === "number" && (
-                            <span className="text-xs text-zinc-500 dark:text-zinc-400 tabular-nums">
-                              {item.installs >= 10000
-                                ? `${(item.installs / 10000).toFixed(1)}万`
-                                : item.installs.toLocaleString()}
+                    {searchResults.map((item, i) => {
+                      const key = `search:${item.source}${item.skillName ? `@${item.skillName}` : ""}`;
+                      const displayName = item.skillName ?? item.source;
+                      const busy = installingKey === key;
+                      const installed = item.skillName ? isInstalled(item.skillName) : false;
+                      return (
+                        <ListRow key={`${key}-${i}`}>
+                          <div className="min-w-0 flex-1 flex items-center gap-3">
+                            <span className="font-medium text-zinc-900 dark:text-zinc-100 truncate" title={displayName}>
+                              {displayName}
                             </span>
-                          )}
-                          {installed ? (
-                            <span className="text-xs text-zinc-500 dark:text-zinc-400 w-12">已安装</span>
-                          ) : (
+                            <span className="text-sm text-zinc-500 dark:text-zinc-400 truncate shrink-0 max-w-[40%]" title={item.source}>
+                              {item.source}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {typeof item.installs === "number" && (
+                              <span className="text-xs text-zinc-500 dark:text-zinc-400 tabular-nums">
+                                {item.installs >= 10000
+                                  ? `${(item.installs / 10000).toFixed(1)}万`
+                                  : item.installs.toLocaleString()}
+                              </span>
+                            )}
+                            {installed ? (
+                              <span className="text-xs text-zinc-500 dark:text-zinc-400 w-12">已安装</span>
+                            ) : (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={installLoading || busy}
+                                onClick={() => void handleInstallFromSource(item.source, key, item.skillName)}
+                              >
+                                {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                                <span className="ml-1">{busy ? "安装中…" : "安装"}</span>
+                              </Button>
+                            )}
                             <Button
                               type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={installLoading || busy}
-                              onClick={() => void handleInstallFromSource(item.source, key, item.skillName)}
+                              variant="ghost"
+                              size="icon"
+                              className="size-8"
+                              onClick={() => void handleOpenInBrowser(item.source)}
+                              title="在系统默认浏览器中查看"
                             >
-                              {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                              <span className="ml-1">{busy ? "安装中…" : "安装"}</span>
+                              <ExternalLink className="size-4" />
                             </Button>
-                          )}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="size-8"
-                            onClick={() => void handleOpenInBrowser(item.source)}
-                            title="在系统默认浏览器中查看"
-                          >
-                            <ExternalLink className="size-4" />
-                          </Button>
-                        </div>
-                      </ListRow>
-                    );
-                  })}
-                  {hasMore && (
-                    <ListFooter>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => void handleLoadMore()}
-                        disabled={loadMoreLoading || searchLoading}
-                      >
-                        {loadMoreLoading ? <Loader2 className="size-4 animate-spin mr-1" /> : null}
-                        {loadMoreLoading ? "加载中…" : "加载更多"}
-                      </Button>
-                    </ListFooter>
-                  )}
-                </List>
+                          </div>
+                        </ListRow>
+                      );
+                    })}
+                    {hasMore && (
+                      <ListFooter>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => void handleLoadMore()}
+                          disabled={loadMoreLoading || searchLoading}
+                        >
+                          {loadMoreLoading ? <Loader2 className="size-4 animate-spin mr-1" /> : null}
+                          {loadMoreLoading ? "加载中…" : "加载更多"}
+                        </Button>
+                      </ListFooter>
+                    )}
+                  </List>
               ) : (
                 <p className="text-sm text-zinc-500 dark:text-zinc-400 py-8 px-4 text-center">
                   暂无结果。可输入关键词搜索，或在「其他」tab 中使用 URL / zip 安装。
@@ -465,7 +498,10 @@ export function Skills() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => void refetch()}
+                onClick={async () => {
+                  await dispatch(fetchSkills(undefined));
+                  await dispatch(fetchSkills(workspacePath ?? undefined));
+                }}
                 disabled={isLoading}
               >
                 {isLoading ? "加载中…" : "刷新"}
