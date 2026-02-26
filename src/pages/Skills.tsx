@@ -268,22 +268,37 @@ export function Skills() {
 
   return (
     <div className="flex flex-col h-full min-h-0 p-6">
-      <h1 className="page-header mb-4 shrink-0">Skills 管理</h1>
-      <p className="mb-4 text-sm text-zinc-500 dark:text-zinc-400 shrink-0">
-        在「搜索」中从 skills.sh 查找并安装技能；「已安装」中查看与管理当前 skills；「其他」中通过 URL 或离线 zip 安装。
+      <h1 className="page-header mb-1.5 shrink-0">Skills 管理</h1>
+      <p className="page-description mb-4 shrink-0">
+        Skills 是可被 AI 调用的能力扩展（如搜索、读写文件等），以 SKILL.md 定义并安装在本地。默认安装到 home 下全局目录：~/.agents/skills。
       </p>
       {error && (
         <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1 min-h-0 w-full">
-        <TabsList className="shrink-0">
-          <TabsTrigger value="search">搜索</TabsTrigger>
-          <TabsTrigger value="installed">已安装</TabsTrigger>
-          <TabsTrigger value="other">其他</TabsTrigger>
+        <TabsList className="w-full flex rounded-none bg-transparent p-0 h-auto border-b border-zinc-200 dark:border-zinc-700 shrink-0">
+          <TabsTrigger
+            value="search"
+            className="cursor-pointer rounded-none border-b-2 border-transparent -mb-px px-5 py-3 text-sm font-medium transition-colors data-[state=active]:border-zinc-900 data-[state=active]:font-semibold data-[state=active]:text-zinc-900 data-[state=active]:bg-transparent data-[state=active]:shadow-none dark:data-[state=active]:border-zinc-100 dark:data-[state=active]:text-zinc-100 data-[state=inactive]:text-zinc-500 data-[state=inactive]:hover:text-zinc-700 dark:data-[state=inactive]:text-zinc-400 dark:data-[state=inactive]:hover:text-zinc-300"
+          >
+            搜索
+          </TabsTrigger>
+          <TabsTrigger
+            value="installed"
+            className="cursor-pointer rounded-none border-b-2 border-transparent -mb-px px-5 py-3 text-sm font-medium transition-colors data-[state=active]:border-zinc-900 data-[state=active]:font-semibold data-[state=active]:text-zinc-900 data-[state=active]:bg-transparent data-[state=active]:shadow-none dark:data-[state=active]:border-zinc-100 dark:data-[state=active]:text-zinc-100 data-[state=inactive]:text-zinc-500 data-[state=inactive]:hover:text-zinc-700 dark:data-[state=inactive]:text-zinc-400 dark:data-[state=inactive]:hover:text-zinc-300"
+          >
+            已安装 {skills.length}
+          </TabsTrigger>
+          <TabsTrigger
+            value="other"
+            className="cursor-pointer rounded-none border-b-2 border-transparent -mb-px px-5 py-3 text-sm font-medium transition-colors data-[state=active]:border-zinc-900 data-[state=active]:font-semibold data-[state=active]:text-zinc-900 data-[state=active]:bg-transparent data-[state=active]:shadow-none dark:data-[state=active]:border-zinc-100 dark:data-[state=active]:text-zinc-100 data-[state=inactive]:text-zinc-500 data-[state=inactive]:hover:text-zinc-700 dark:data-[state=inactive]:text-zinc-400 dark:data-[state=inactive]:hover:text-zinc-300"
+          >
+            其他
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="search" className="flex flex-col flex-1 min-h-0 mt-4">
+        <TabsContent value="search" className="flex flex-col flex-1 min-h-0 mt-6">
           {/* 可滚动区域占满剩余空间，Load more 在滚动末尾 */}
           <section className="flex flex-col flex-1 min-h-0 gap-2">
             <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -390,50 +405,54 @@ export function Skills() {
           </section>
         </TabsContent>
 
-        <TabsContent value="other">
+        <TabsContent value="other" className="mt-6">
           <section>
             <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm text-zinc-600 dark:text-zinc-400 w-20 shrink-0">URL 安装</span>
-                <Input
-                  type="text"
-                  placeholder="owner/repo 或完整 URL，如 vercel-labs/agent-skills"
-                  value={pasteSource}
-                  onChange={(e) => setPasteSource(e.target.value)}
-                  className="max-w-md"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={installLoading || !pasteSource.trim()}
-                  onClick={() => void handlePasteInstall()}
-                >
-                  {installingKey?.startsWith("paste:") ? (
-                    <Loader2 className="size-4 animate-spin mr-1" />
-                  ) : (
-                    <Download className="mr-1 size-4" />
-                  )}
-                  {installingKey?.startsWith("paste:") ? "安装中…" : "安装"}
-                </Button>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm text-zinc-600 dark:text-zinc-400">URL 安装</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    type="text"
+                    placeholder="owner/repo 或完整 URL，如 vercel-labs/agent-skills"
+                    value={pasteSource}
+                    onChange={(e) => setPasteSource(e.target.value)}
+                    className="max-w-md"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={installLoading || !pasteSource.trim()}
+                    onClick={() => void handlePasteInstall()}
+                  >
+                    {installingKey?.startsWith("paste:") ? (
+                      <Loader2 className="size-4 animate-spin mr-1" />
+                    ) : (
+                      <Download className="mr-1 size-4" />
+                    )}
+                    {installingKey?.startsWith("paste:") ? "安装中…" : "安装"}
+                  </Button>
+                </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm text-zinc-600 dark:text-zinc-400 w-20 shrink-0">离线安装</span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={installLoading}
-                  onClick={() => void handleInstallFromZip()}
-                >
-                  <FileArchive className="mr-1 size-4" />
-                  {installLoading ? "安装中…" : "选择 zip 安装"}
-                </Button>
-                <span className="text-xs text-zinc-500 dark:text-zinc-400">从本机选择 skill 的 zip 包安装</span>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm text-zinc-600 dark:text-zinc-400">离线安装</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={installLoading}
+                    onClick={() => void handleInstallFromZip()}
+                  >
+                    <FileArchive className="mr-1 size-4" />
+                    {installLoading ? "安装中…" : "选择 zip 安装"}
+                  </Button>
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">从本机选择 skill 的 zip 包安装</span>
+                </div>
               </div>
             </div>
           </section>
         </TabsContent>
 
-        <TabsContent value="installed">
+        <TabsContent value="installed" className="mt-6">
           {isConnected && (
             <div className="mb-4 flex flex-wrap items-center gap-2">
               <Input
