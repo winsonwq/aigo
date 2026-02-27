@@ -8,9 +8,10 @@ import { useConfirmModal } from "@/components/ConfirmModal";
 import { revealItemInDir, openUrl } from "@tauri-apps/plugin-opener";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { FolderOpen, FileArchive, Search, Loader2, Download, ExternalLink, Trash2 } from "lucide-react";
+import { FolderOpen, FileArchive, Search, Loader2, Download, ExternalLink, Trash2, Terminal } from "lucide-react";
 import { useMemo, useState, useEffect, useCallback, useRef } from "react";
+import { InstallOutputDialog } from "@/components/InstallOutputDialog";
+import { useRunOutput } from "@/context/RunOutputContext";
 import { Input } from "@/components/ui/input";
 import {
   searchSkillsShApi,
@@ -20,16 +21,18 @@ import {
 } from "@/api/skillsSh";
 import { toast } from "@/components/ui/sonner";
 import { useDispatch } from "react-redux";
+import type { AppDispatch } from "@/store";
 import { fetchSkills, skillsSlice } from "@/store/slices/skillsSlice";
 
 export function Skills() {
-  const dispatch = useDispatch();
+  const dispatch = useDispatch<AppDispatch>();
   const { confirm: confirmModal } = useConfirmModal();
   const { status } = useOpenCode();
   const { workspacePath } = useWorkspace();
-  const { skills, isLoading, error, refetch } = useSkills(
-    workspacePath ?? undefined
-  );
+  /** 始终拉取全局已安装列表（directory undefined），安装/刷新都基于该列表 */
+  const { skills, isLoading, error, refetch } = useSkills(undefined);
+  const { runs: installRuns, addRun } = useRunOutput();
+
   const [search, setSearch] = useState("");
   const isConnected = status === "connected";
 
@@ -46,9 +49,18 @@ export function Skills() {
 
   const [pasteSource, setPasteSource] = useState("");
   const [installLoading, setInstallLoading] = useState(false);
-  const [installingKey, setInstallingKey] = useState<string | null>(null);
-  const [installStage, setInstallStage] = useState<string>("");
+  const [outputDialogOpen, setOutputDialogOpen] = useState(false);
+  const [selectedOutputRunId, setSelectedOutputRunId] = useState<string | null>(null);
   const [uninstallingName, setUninstallingName] = useState<string | null>(null);
+
+  /** 已处理过「安装成功」的 runId，避免重复 toast/refetch */
+  const handledSuccessRunIdsRef = useRef<Set<string>>(new Set());
+
+  /** 正在安装的 key 集合（用于每行显示「安装中」且不阻塞其他行安装） */
+  const runningInstallKeys = useMemo(
+    () => new Set(Object.values(installRuns).filter((r) => r.status === "running").map((r) => r.key)),
+    [installRuns]
+  );
 
   const filteredSkills = useMemo(() => {
     if (!search.trim()) return skills;
@@ -61,9 +73,21 @@ export function Skills() {
     );
   }, [skills, search]);
 
+  /** 规范化名称用于匹配：小写、空格转连字符、合并连续连字符（API 可能返回 "Find Skills"，catalog 为 "find-skills"） */
   const isInstalled = useMemo(() => {
-    const names = new Set(skills.map((s) => s.name.toLowerCase()));
-    return (nameOrSkill: string) => names.has(nameOrSkill.toLowerCase());
+    const normalize = (s: string) =>
+      s
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, "-")
+        .replace(/-+/g, "-");
+    const exact = new Set(skills.map((s) => s.name.toLowerCase()));
+    const normalized = new Set(skills.map((s) => normalize(s.name)));
+    return (nameOrSkill: string) => {
+      const n = nameOrSkill.toLowerCase();
+      const norm = normalize(nameOrSkill);
+      return exact.has(n) || normalized.has(norm);
+    };
   }, [skills]);
 
   /** 进入 Skills 页后延后拉取已安装列表，用于显示 tab「已安装 N」数字；连接建立后也拉取一次 */
@@ -87,18 +111,51 @@ export function Skills() {
     void refetch();
   }, [isConnected, refetch]);
 
+  /** 安装成功时：乐观更新列表、toast、清除 recentlyRemoved、并多次 refetch 以同步服务端列表 */
   useEffect(() => {
-    let cancelled = false;
-    const unlistenPromise = listen<{ stage: string }>("install_skill_progress", (ev) => {
-      if (cancelled) return;
-      const stage = ev.payload?.stage ?? "";
-      setInstallStage(stage === "cloning" ? "克隆/安装中…" : stage === "done" ? "校验…" : stage);
-    });
-    return () => {
-      cancelled = true;
-      unlistenPromise.then((fn) => { if (typeof fn === "function") fn(); }).catch(() => {});
-    };
-  }, []);
+    const runList = Object.values(installRuns);
+    const timeouts: ReturnType<typeof setTimeout>[] = [];
+    for (const r of runList) {
+      if (r.status !== "done" || r.exitCode !== 0) continue;
+      if (handledSuccessRunIdsRef.current.has(r.runId)) continue;
+      handledSuccessRunIdsRef.current.add(r.runId);
+      if (r.skillName) {
+        dispatch(skillsSlice.actions.clearRecentlyRemovedSkill(r.skillName));
+        dispatch(
+          skillsSlice.actions.addOptimisticSkill({
+            name: r.skillName,
+            description: "",
+            location: "",
+          })
+        );
+        // 异步解析真实路径，补全 location 以便显示「打开文件夹」按钮
+        invoke<string>("resolve_global_skill_path", { skillName: r.skillName })
+          .then((loc) => {
+            if (loc?.trim()) {
+              dispatch(skillsSlice.actions.updateOptimisticSkillLocation({ name: r.skillName!, location: loc }));
+            }
+          })
+          .catch(() => {});
+      }
+      toast.success("安装成功");
+      void refetch();
+      timeouts.push(setTimeout(() => void refetch(), 400));
+      timeouts.push(setTimeout(() => void refetch(), 1200));
+      timeouts.push(setTimeout(() => void refetch(), 2500));
+    }
+    return () => { timeouts.forEach(clearTimeout); };
+  }, [installRuns, dispatch, refetch]);
+
+  /** 安装失败时 toast（每个 run 只 toast 一次） */
+  useEffect(() => {
+    const runList = Object.values(installRuns);
+    for (const r of runList) {
+      if (r.status !== "done" || r.exitCode === 0) continue;
+      if (handledSuccessRunIdsRef.current.has(r.runId)) continue;
+      handledSuccessRunIdsRef.current.add(r.runId);
+      toast.error(`安装失败（退出码 ${r.exitCode}）`);
+    }
+  }, [installRuns]);
 
   function getSkillRepoUrl(source: string): string {
     const s = source.trim();
@@ -201,30 +258,26 @@ export function Skills() {
     }
   }
 
-  async function handleInstallFromSource(source: string, key: string, skillName?: string) {
-    setInstallingKey(key);
-    setInstallStage("准备…");
-    setInstallLoading(true);
+  async function handleInstallFromSource(source: string, key: string, label: string, skillName?: string) {
     try {
-      await invoke("install_skill_from_source", {
+      const runId = await invoke<string>("install_skill_from_source", {
         source,
         skillName: skillName ?? null,
         target: "global",
         projectPath: undefined,
       });
-      toast.success("安装成功");
-      if (skillName) dispatch(skillsSlice.actions.clearRecentlyRemovedSkill(skillName));
-      // 安装到全局，拉取全局列表并给 OpenCode 一点时间扫描新文件
-      await new Promise((r) => setTimeout(r, 800));
-      await dispatch(fetchSkills(undefined));
-      await new Promise((r) => setTimeout(r, 300));
-      await dispatch(fetchSkills(undefined));
+      addRun({
+        runId,
+        label,
+        skillName,
+        key,
+        stdout: "",
+        stderr: "",
+        status: "running",
+      });
+      // 不自动打开弹窗；用户可点击右侧终端图标查看输出
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
-    } finally {
-      setInstallingKey(null);
-      setInstallStage("");
-      setInstallLoading(false);
     }
   }
 
@@ -259,7 +312,7 @@ export function Skills() {
   async function handlePasteInstall() {
     const source = pasteSource.trim();
     if (!source) return;
-    await handleInstallFromSource(source, `paste:${source}`);
+    await handleInstallFromSource(source, `paste:${source}`, source);
   }
 
   /**
@@ -367,7 +420,7 @@ export function Skills() {
                     {searchResults.map((item, i) => {
                       const key = `search:${item.source}${item.skillName ? `@${item.skillName}` : ""}`;
                       const displayName = item.skillName ?? item.source;
-                      const busy = installingKey === key;
+                      const busy = runningInstallKeys.has(key);
                       const installed = item.skillName ? isInstalled(item.skillName) : false;
                       return (
                         <ListRow key={`${key}-${i}`}>
@@ -390,16 +443,34 @@ export function Skills() {
                             {installed ? (
                               <span className="text-xs text-zinc-500 dark:text-zinc-400 w-12">已安装</span>
                             ) : (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                disabled={installLoading || busy}
-                                onClick={() => void handleInstallFromSource(item.source, key, item.skillName)}
-                              >
-                                {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                                <span className="ml-1">{busy ? "安装中…" : "安装"}</span>
-                              </Button>
+                              <>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={busy}
+                                  onClick={() => void handleInstallFromSource(item.source, key, displayName, item.skillName)}
+                                >
+                                  {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                                  <span className="ml-1">{busy ? "安装中…" : "安装"}</span>
+                                </Button>
+                                {busy && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-8"
+                                  title="查看终端输出"
+                                  onClick={() => {
+                                    setOutputDialogOpen(true);
+                                    const runId = Object.entries(installRuns).find(([, r]) => r.key === key && r.status === "running")?.[0];
+                                    if (runId) setSelectedOutputRunId(runId);
+                                  }}
+                                >
+                                  <Terminal className="size-4" />
+                                </Button>
+                                )}
+                              </>
                             )}
                             <Button
                               type="button"
@@ -454,16 +525,32 @@ export function Skills() {
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={installLoading || !pasteSource.trim()}
+                    disabled={!pasteSource.trim() || runningInstallKeys.has(`paste:${pasteSource.trim()}`)}
                     onClick={() => void handlePasteInstall()}
                   >
-                    {installingKey?.startsWith("paste:") ? (
+                    {runningInstallKeys.has(`paste:${pasteSource.trim()}`) ? (
                       <Loader2 className="size-4 animate-spin mr-1" />
                     ) : (
                       <Download className="mr-1 size-4" />
                     )}
-                    {installingKey?.startsWith("paste:") ? "安装中…" : "安装"}
+                    {runningInstallKeys.has(`paste:${pasteSource.trim()}`) ? "安装中…" : "安装"}
                   </Button>
+                  {runningInstallKeys.has(`paste:${pasteSource.trim()}`) && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-8"
+                      title="查看终端输出"
+                      onClick={() => {
+                        setOutputDialogOpen(true);
+                        const runId = Object.entries(installRuns).find(([, r]) => r.key === `paste:${pasteSource.trim()}` && r.status === "running")?.[0];
+                        if (runId) setSelectedOutputRunId(runId);
+                      }}
+                    >
+                      <Terminal className="size-4" />
+                    </Button>
+                  )}
                 </div>
               </div>
               <div className="flex flex-col gap-1.5">
@@ -498,10 +585,7 @@ export function Skills() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={async () => {
-                  await dispatch(fetchSkills(undefined));
-                  await dispatch(fetchSkills(workspacePath ?? undefined));
-                }}
+                onClick={() => void refetch()}
                 disabled={isLoading}
               >
                 {isLoading ? "加载中…" : "刷新"}
@@ -561,6 +645,13 @@ export function Skills() {
           )}
         </TabsContent>
       </Tabs>
+
+      <InstallOutputDialog
+        open={outputDialogOpen}
+        onOpenChange={setOutputDialogOpen}
+        runId={selectedOutputRunId}
+        title="安装输出"
+      />
     </div>
   );
 }

@@ -1,0 +1,5 @@
+# Allow the frontend to resolve the filesystem path of a globally installed skill.
+[[permission]]
+identifier = "allow-resolve-global-skill-path"
+description = "Enables resolve_global_skill_path to return the skill directory path for opening in file manager."
+commands.allow = ["resolve_global_skill_path"]

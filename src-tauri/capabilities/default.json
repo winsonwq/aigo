@@ -18,7 +18,7 @@
     "allow-search-skills-via-api",
     "allow-install-skill-from-source",
 "allow-uninstall-skill",
-    "allow-read-attachment-file",
+    "allow-resolve-global-skill-path","allow-read-attachment-file",
     {
       "identifier": "shell:allow-execute",
       "allow": [

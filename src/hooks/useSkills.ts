@@ -11,7 +11,13 @@ export type { SkillItem };
  */
 export function useSkills(directory?: string) {
   const dispatch = useDispatch<AppDispatch>();
-  const skills = useSelector((s: RootState) => s.skills.skills);
+  const skills = useSelector((s: RootState) => {
+    const list = s.skills.skills;
+    const opt = s.skills.optimisticSkills.filter(
+      (o) => !list.some((sk) => sk.name.toLowerCase() === o.name.toLowerCase())
+    );
+    return [...list, ...opt];
+  });
   const isLoading = useSelector((s: RootState) => s.skills.isLoading);
   const error = useSelector((s: RootState) => s.skills.error);
 

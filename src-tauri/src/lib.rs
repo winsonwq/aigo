@@ -3,9 +3,12 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::time::Duration;
 use tauri::{Emitter, Manager};
+
+static INSTALL_RUN_ID: AtomicU64 = AtomicU64::new(0);
 
 const ATTACHMENT_MAX_READ_BYTES: usize = 300 * 1024;
 const ATTACHMENT_EXCERPT_CHARS: usize = 8000;
@@ -805,6 +808,26 @@ fn run_npx_unix(args: &[&str], project_path: Option<&str>) -> Result<std::proces
     cmd.output().map_err(|e| format!("执行 npx 失败: {}", e))
 }
 
+/// Spawn npx on Unix with piped stdout/stderr for streaming output.
+#[cfg(unix)]
+fn run_npx_unix_spawn(args: &[&str], project_path: Option<&str>) -> Result<std::process::Child, String> {
+    let path_env = get_path_via_shell_with_timeout(5);
+    let npx_bin = find_npx_in_path(&path_env);
+    let mut cmd = Command::new(&npx_bin);
+    cmd.args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .env("PATH", &path_env)
+        .env("CI", "true")
+        .env("npm_config_yes", "true")
+        .env("NPX_YES", "true");
+    if let Some(p) = project_path.filter(|s| !s.is_empty()) {
+        cmd.current_dir(p);
+    }
+    cmd.spawn().map_err(|e| format!("执行 npx 失败: {}", e))
+}
+
 /// Sync implementation of npx skills add (run in spawn_blocking so UI stays responsive).
 /// On Unix runs npx via login shell so PATH/env match terminal and npx doesn't hang in GUI.
 fn install_skill_from_source_sync(
@@ -895,8 +918,202 @@ fn install_skill_from_source_sync(
     }
 }
 
-/// Install a skill via `npx skills add <source> -g -a opencode -y`. Emits install_skill_progress events.
-/// Runs in spawn_blocking so the UI stays responsive during install.
+/// Event payload for streaming command output (stdout/stderr).
+#[derive(Clone, serde::Serialize)]
+struct CmdOutputPayload {
+    run_id: String,
+    stream: String,
+    data: String,
+}
+
+/// Event payload when command exits.
+#[derive(Clone, serde::Serialize)]
+struct CmdExitPayload {
+    run_id: String,
+    exit_code: i32,
+}
+
+/// Runs npx skills add with piped stdout/stderr, reads streams in threads and emits cmd_output / cmd_exit.
+fn install_skill_from_source_stream_sync(
+    app: tauri::AppHandle,
+    run_id: String,
+    source: String,
+    skill_name: Option<String>,
+    target: String,
+    project_path: Option<String>,
+) {
+    let source = source.trim();
+    if source.is_empty() {
+        let _ = app.emit("cmd_output", CmdOutputPayload { run_id: run_id.clone(), stream: "stderr".into(), data: "source 不能为空".to_string() });
+        let _ = app.emit("cmd_exit", CmdExitPayload { run_id, exit_code: -1 });
+        return;
+    }
+
+    let mut args: Vec<&str> = vec!["skills", "add", source];
+    if target == "global" {
+        args.push("-g");
+    }
+    args.extend(["-a", "opencode", "-y"]);
+    if let Some(ref name) = skill_name {
+        if !name.is_empty() {
+            args.push("--skill");
+            args.push(name.as_str());
+        }
+    }
+
+    #[cfg(windows)]
+    let child_result = {
+        let npx_bin = find_npx_binary();
+        let npx_args: Vec<String> = args.iter().map(|s| (*s).to_string()).collect();
+        let cmd_str = std::iter::once(npx_bin.to_string_lossy().to_string())
+            .chain(npx_args)
+            .collect::<Vec<_>>()
+            .join(" ");
+        Command::new("cmd")
+            .args(["/C", &cmd_str])
+            .current_dir(project_path.as_deref().unwrap_or("."))
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("执行 npx 失败: {}", e))
+    };
+
+    #[cfg(unix)]
+    let child_result = run_npx_unix_spawn(&args, project_path.as_deref());
+
+    let mut child = match child_result {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = app.emit("cmd_output", CmdOutputPayload { run_id: run_id.clone(), stream: "stderr".into(), data: e.clone() });
+            let _ = app.emit("cmd_exit", CmdExitPayload { run_id, exit_code: -1 });
+            return;
+        }
+    };
+
+    let mut stdout = match child.stdout.take() {
+        Some(s) => s,
+        None => {
+            let _ = app.emit("cmd_exit", CmdExitPayload { run_id, exit_code: -1 });
+            return;
+        }
+    };
+    let mut stderr = match child.stderr.take() {
+        Some(s) => s,
+        None => {
+            let _ = app.emit("cmd_exit", CmdExitPayload { run_id, exit_code: -1 });
+            return;
+        }
+    };
+
+    /// Emit complete UTF-8 from buffer; return trailing incomplete bytes to prepend to next read.
+    fn emit_utf8_complete(
+        buf: &[u8],
+        n: usize,
+        pending: &mut Vec<u8>,
+        strip_and_emit: impl FnOnce(String),
+    ) {
+        if n == 0 {
+            return;
+        }
+        let mut tail_continuation = 0usize;
+        for i in (0..n).rev() {
+            if (0x80..=0xBF).contains(&buf[i]) {
+                tail_continuation += 1;
+            } else {
+                break;
+            }
+        }
+        let split = n.saturating_sub(tail_continuation + 1);
+        if split > 0 {
+            let s = strip_ansi(&String::from_utf8_lossy(&buf[..split]).to_string());
+            if !s.is_empty() {
+                strip_and_emit(s);
+            }
+        }
+        pending.clear();
+        pending.extend_from_slice(&buf[split..n]);
+    }
+
+    let app_out = app.clone();
+    let app_exit = app.clone();
+    let run_id_out = run_id.clone();
+    let run_id_exit = run_id.clone();
+    let th_out = std::thread::spawn(move || {
+        let mut buf = [0u8; 4096];
+        let mut pending: Vec<u8> = Vec::with_capacity(4);
+        loop {
+            let read_range = if pending.is_empty() {
+                0..buf.len()
+            } else {
+                let plen = pending.len();
+                buf[..plen].copy_from_slice(&pending);
+                pending.clear();
+                plen..buf.len()
+            };
+            let read_start = read_range.start;
+            match std::io::Read::read(&mut stdout, &mut buf[read_range]) {
+                Ok(0) => {
+                    if read_start > 0 {
+                        let s = strip_ansi(&String::from_utf8_lossy(&buf[..read_start]).to_string());
+                        if !s.is_empty() {
+                            let _ = app_out.emit("cmd_output", CmdOutputPayload { run_id: run_id_out.clone(), stream: "stdout".into(), data: s });
+                        }
+                    }
+                    break;
+                }
+                Ok(n_read) => {
+                    let n = read_start + n_read;
+                    emit_utf8_complete(&buf, n, &mut pending, |s| {
+                        let _ = app_out.emit("cmd_output", CmdOutputPayload { run_id: run_id_out.clone(), stream: "stdout".into(), data: s });
+                    });
+                }
+                Err(_) => break,
+            }
+        }
+    });
+    let th_err = std::thread::spawn(move || {
+        let mut buf = [0u8; 4096];
+        let mut pending: Vec<u8> = Vec::with_capacity(4);
+        loop {
+            let read_range = if pending.is_empty() {
+                0..buf.len()
+            } else {
+                let plen = pending.len();
+                buf[..plen].copy_from_slice(&pending);
+                pending.clear();
+                plen..buf.len()
+            };
+            let read_start = read_range.start;
+            match std::io::Read::read(&mut stderr, &mut buf[read_range]) {
+                Ok(0) => {
+                    if read_start > 0 {
+                        let s = strip_ansi(&String::from_utf8_lossy(&buf[..read_start]).to_string());
+                        if !s.is_empty() {
+                            let _ = app.emit("cmd_output", CmdOutputPayload { run_id: run_id.clone(), stream: "stderr".into(), data: s });
+                        }
+                    }
+                    break;
+                }
+                Ok(n_read) => {
+                    let n = read_start + n_read;
+                    emit_utf8_complete(&buf, n, &mut pending, |s| {
+                        let _ = app.emit("cmd_output", CmdOutputPayload { run_id: run_id.clone(), stream: "stderr".into(), data: s });
+                    });
+                }
+                Err(_) => break,
+            }
+        }
+    });
+
+    th_out.join().ok();
+    th_err.join().ok();
+
+    let code = child.wait().ok().and_then(|s| s.code()).unwrap_or(-1);
+    let _ = app_exit.emit("cmd_exit", CmdExitPayload { run_id: run_id_exit, exit_code: code });
+}
+
+/// Install a skill via `npx skills add <source> -g -a opencode -y`. Returns run_id immediately; streams stdout/stderr via cmd_output events and final exit via cmd_exit.
 #[tauri::command]
 async fn install_skill_from_source(
     app: tauri::AppHandle,
@@ -904,14 +1121,23 @@ async fn install_skill_from_source(
     skill_name: Option<String>,
     target: String,
     project_path: Option<String>,
-) -> Result<(), String> {
-    let _ = app.emit("install_skill_progress", serde_json::json!({ "stage": "cloning" }));
+) -> Result<String, String> {
+    let source_trimmed = source.trim();
+    if source_trimmed.is_empty() {
+        return Err("source 不能为空".to_string());
+    }
 
-    tokio::task::spawn_blocking(move || {
-        install_skill_from_source_sync(app, source, skill_name, target, project_path)
-    })
-    .await
-    .map_err(|e| format!("安装任务失败: {}", e))?
+    let run_id = INSTALL_RUN_ID.fetch_add(1, Ordering::Relaxed).to_string();
+    let app_clone = app.clone();
+    let run_id_clone = run_id.clone();
+    tokio::task::spawn(async move {
+        tokio::task::spawn_blocking(move || {
+            install_skill_from_source_stream_sync(app_clone, run_id_clone, source, skill_name, target, project_path);
+        })
+        .await
+        .ok();
+    });
+    Ok(run_id)
 }
 
 /// Sanitize skill name to directory name (alphanumeric, '-', '_' only), same as install_skill_from_zip.
@@ -941,6 +1167,28 @@ fn global_skill_roots() -> Vec<PathBuf> {
         roots.push(config.join("opencode").join("skills"));
     }
     roots
+}
+
+/// Resolve the filesystem path of a globally installed skill by name. Returns the first existing directory under known global roots.
+#[tauri::command]
+fn resolve_global_skill_path(skill_name: String) -> Option<String> {
+    let name = skill_name.trim();
+    if name.is_empty() {
+        return None;
+    }
+    let dir_name = skill_name_to_dir_name(name);
+    if dir_name.is_empty() {
+        return None;
+    }
+    for root in global_skill_roots() {
+        if root.exists() {
+            let skill_dir = root.join(&dir_name);
+            if skill_dir.is_dir() {
+                return skill_dir.to_string_lossy().into_owned().into();
+            }
+        }
+    }
+    None
 }
 
 /// Returns true if `path` is under one of the allowed skill roots (global config or project .opencode/.agents/skills).
@@ -1147,6 +1395,7 @@ pub fn run() {
             search_skills_via_api,
             install_skill_from_source,
             uninstall_skill,
+            resolve_global_skill_path,
             read_attachment_file,
         ])
         .run(tauri::generate_context!())
