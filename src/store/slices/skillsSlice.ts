@@ -8,6 +8,8 @@ export type SkillItem = {
   name: string;
   description: string;
   location: string;
+  /** 来源仓库，如 "owner/repo"，从技能目录 .git 解析，用于与搜索结果的 source 匹配 */
+  source?: string;
   content?: string;
 };
 
@@ -21,7 +23,7 @@ export const fetchSkillsFromDisk = createAsyncThunk<
   async ({ projectPath }, { rejectWithValue }) => {
     try {
       const list = await (await import("@tauri-apps/api/core")).invoke<
-        { name: string; description: string; location: string }[]
+        { name: string; description: string; location: string; source?: string }[]
       >("list_installed_skills", {
         projectPath: projectPath ?? undefined,
       });
@@ -29,6 +31,7 @@ export const fetchSkillsFromDisk = createAsyncThunk<
         name: s.name,
         description: s.description ?? "",
         location: s.location ?? "",
+        source: s.source,
       }));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

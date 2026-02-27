@@ -12,6 +12,8 @@ import { listen } from "@tauri-apps/api/event";
 export type RunOutputRecord = {
   runId: string;
   label: string;
+  /** 实际执行的命令，用于在输出区域顶部展示 */
+  command?: string;
   skillName?: string;
   key: string;
   stdout: string;

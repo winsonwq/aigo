@@ -1035,7 +1035,7 @@ fn install_skill_from_source_stream_sync(
         }
         let split = n.saturating_sub(tail_continuation + 1);
         if split > 0 {
-            let s = strip_ansi(&String::from_utf8_lossy(&buf[..split]).to_string());
+            let s = String::from_utf8_lossy(&buf[..split]).to_string();
             if !s.is_empty() {
                 strip_and_emit(s);
             }
@@ -1064,7 +1064,7 @@ fn install_skill_from_source_stream_sync(
             match std::io::Read::read(&mut stdout, &mut buf[read_range]) {
                 Ok(0) => {
                     if read_start > 0 {
-                        let s = strip_ansi(&String::from_utf8_lossy(&buf[..read_start]).to_string());
+                        let s = String::from_utf8_lossy(&buf[..read_start]).to_string();
                         if !s.is_empty() {
                             let _ = app_out.emit("cmd_output", CmdOutputPayload { run_id: run_id_out.clone(), stream: "stdout".into(), data: s });
                         }
@@ -1097,7 +1097,7 @@ fn install_skill_from_source_stream_sync(
             match std::io::Read::read(&mut stderr, &mut buf[read_range]) {
                 Ok(0) => {
                     if read_start > 0 {
-                        let s = strip_ansi(&String::from_utf8_lossy(&buf[..read_start]).to_string());
+                        let s = String::from_utf8_lossy(&buf[..read_start]).to_string();
                         if !s.is_empty() {
                             let _ = app.emit("cmd_output", CmdOutputPayload { run_id: run_id.clone(), stream: "stderr".into(), data: s });
                         }
@@ -1182,12 +1182,45 @@ fn global_skill_roots() -> Vec<PathBuf> {
     roots
 }
 
-/// One installed skill item (name, description, path on disk). Single source of truth: read from filesystem.
+/// Read git remote origin from a skill directory and normalize to "owner/repo" for matching with search results.
+fn git_origin_to_source(skill_dir: &Path) -> Option<String> {
+    let git_config = skill_dir.join(".git").join("config");
+    let content = fs::read_to_string(&git_config).ok()?;
+    let mut in_remote_origin = false;
+    for line in content.lines() {
+        let line = line.trim();
+        if line.starts_with('[') {
+            in_remote_origin = line == "[remote \"origin\"]";
+            continue;
+        }
+        if in_remote_origin && line.starts_with("url = ") {
+            let url = line.strip_prefix("url = ")?.trim();
+            // https://github.com/owner/repo or https://github.com/owner/repo.git or git@github.com:owner/repo.git
+            let s = url
+                .trim_end_matches('/')
+                .trim_end_matches(".git");
+            return if s.starts_with("https://github.com/") {
+                s.strip_prefix("https://github.com/").map(|s| s.to_string())
+            } else if s.starts_with("http://github.com/") {
+                s.strip_prefix("http://github.com/").map(|s| s.to_string())
+            } else if s.starts_with("git@github.com:") {
+                s.strip_prefix("git@github.com:").map(|s| s.to_string())
+            } else {
+                None
+            };
+        }
+    }
+    None
+}
+
+/// One installed skill item (name, description, path on disk, optional source for "owner/repo" matching).
 #[derive(serde::Serialize)]
 struct InstalledSkillItem {
     name: String,
     description: String,
     location: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<String>,
 }
 
 /// List installed skills by reading skill roots on disk (canonical + known roots). Each subdir with valid SKILL.md frontmatter is one skill. Deduped by name.
@@ -1229,10 +1262,12 @@ fn list_installed_skills(project_path: Option<String>) -> Result<Vec<InstalledSk
             }
             seen_names.insert(name_lower);
             let location = path.to_string_lossy().to_string();
+            let source = git_origin_to_source(&path);
             out.push(InstalledSkillItem {
                 name,
                 description,
                 location,
+                source,
             });
         }
     }
@@ -1271,10 +1306,12 @@ fn list_installed_skills(project_path: Option<String>) -> Result<Vec<InstalledSk
                 }
                 seen_names.insert(name_lower);
                 let location = path.to_string_lossy().to_string();
+                let source = git_origin_to_source(&path);
                 out.push(InstalledSkillItem {
                     name,
                     description,
                     location,
+                    source,
                 });
             }
         }

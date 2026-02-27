@@ -7,6 +7,7 @@ function Toaster() {
   return (
     <SonnerToaster
       position="bottom-center"
+      duration={4000}
       toastOptions={{
         classNames: {
           toast:
