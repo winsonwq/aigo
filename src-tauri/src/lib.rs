@@ -424,12 +424,19 @@ fn parse_skill_frontmatter(content: &str) -> Option<(String, String)> {
     Some((name, description))
 }
 
+/// Result returned by install_skill_from_zip (name + description from SKILL.md frontmatter).
+#[derive(serde::Serialize)]
+struct InstallSkillFromZipResult {
+    name: String,
+    description: String,
+}
+
 /// Sync implementation of zip install (run in spawn_blocking so UI stays responsive).
 fn install_skill_from_zip_sync(
     zip_path: String,
     target: String,
     project_path: Option<String>,
-) -> Result<String, String> {
+) -> Result<InstallSkillFromZipResult, String> {
     let zip_path = Path::new(&zip_path);
     if !zip_path.is_file() {
         return Err("所选文件不存在或不是文件".to_string());
@@ -491,14 +498,12 @@ fn install_skill_from_zip_sync(
             let project = project_path.ok_or("选择「当前项目」时需提供项目路径")?;
             Path::new(&project).join(".opencode").join("skills")
         }
-        _ => {
-            dirs::config_dir().ok_or("无法获取配置目录")?.join("opencode").join("skills")
-        }
+        _ => canonical_global_skill_root().ok_or("无法获取配置目录")?,
     };
     let dest_dir = base.join(&dir_name);
 
     if dest_dir.exists() {
-        return Err(format!("已存在同名 skill：{}", dir_name));
+        fs::remove_dir_all(&dest_dir).map_err(|e| format!("无法移除已存在的目录 {}: {}", dir_name, e))?;
     }
     fs::create_dir_all(&dest_dir).map_err(|e| format!("无法创建目录: {}", e))?;
 
@@ -539,12 +544,16 @@ fn install_skill_from_zip_sync(
         return Err("解压后未找到 SKILL.md".to_string());
     }
     let content = fs::read_to_string(&skill_md_dest).map_err(|e| format!("无法读取 SKILL.md: {}", e))?;
-    if parse_skill_frontmatter(&content).is_none() {
-        let _ = fs::remove_dir_all(&dest_dir);
-        return Err("SKILL.md 缺少有效的 YAML frontmatter（name 与 description）".to_string());
-    }
+    let (_, description) = parse_skill_frontmatter(&content)
+        .ok_or_else(|| {
+            let _ = fs::remove_dir_all(&dest_dir);
+            "SKILL.md 缺少有效的 YAML frontmatter（name 与 description）".to_string()
+        })?;
 
-    Ok(skill_name)
+    Ok(InstallSkillFromZipResult {
+        name: skill_name,
+        description,
+    })
 }
 
 /// Install a skill from a zip file. Target: "global" or "project". Runs in a blocking task so the UI stays responsive.
@@ -553,7 +562,7 @@ async fn install_skill_from_zip(
     zip_path: String,
     target: String,
     project_path: Option<String>,
-) -> Result<String, String> {
+) -> Result<InstallSkillFromZipResult, String> {
     tokio::task::spawn_blocking(move || install_skill_from_zip_sync(zip_path, target, project_path))
         .await
         .map_err(|e| format!("安装任务失败: {}", e))?
@@ -1153,20 +1162,125 @@ fn skill_name_to_dir_name(name: &str) -> String {
         .collect()
 }
 
-/// All allowed global skill roots (OpenCode / npx skills may use any of these).
+/// Single canonical root for global skill install (zip and "exists" check). Keeps one source of truth.
+fn canonical_global_skill_root() -> Option<PathBuf> {
+    dirs::config_dir().map(|c| c.join("opencode").join("skills"))
+}
+
+/// All allowed global skill roots (OpenCode / npx skills may use any of these). Uninstall removes from all.
 fn global_skill_roots() -> Vec<PathBuf> {
     let mut roots = Vec::new();
     if let Some(home) = dirs::home_dir() {
-        // OpenCode / npx skills CLI standard path
         roots.push(home.join(".config").join("opencode").join("skills"));
-        // Agent-compatible path (~/.agents/skills) used by some installs
         roots.push(home.join(".agents").join("skills"));
     }
-    // config_dir: used by our zip install (on macOS this is ~/Library/Application Support)
-    if let Some(config) = dirs::config_dir() {
-        roots.push(config.join("opencode").join("skills"));
+    if let Some(canonical) = canonical_global_skill_root() {
+        if !roots.contains(&canonical) {
+            roots.push(canonical);
+        }
     }
     roots
+}
+
+/// One installed skill item (name, description, path on disk). Single source of truth: read from filesystem.
+#[derive(serde::Serialize)]
+struct InstalledSkillItem {
+    name: String,
+    description: String,
+    location: String,
+}
+
+/// List installed skills by reading skill roots on disk (canonical + known roots). Each subdir with valid SKILL.md frontmatter is one skill. Deduped by name.
+#[tauri::command]
+fn list_installed_skills(project_path: Option<String>) -> Result<Vec<InstalledSkillItem>, String> {
+    let mut seen_names = std::collections::HashSet::<String>::new();
+    let mut out = Vec::new();
+
+    for root in global_skill_roots() {
+        if !root.exists() {
+            continue;
+        }
+        let entries = match fs::read_dir(&root) {
+            Ok(e) => e,
+            Err(_e) => {
+                continue;
+            }
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let skill_md = path.join("SKILL.md");
+            if !skill_md.is_file() {
+                continue;
+            }
+            let content = match fs::read_to_string(&skill_md) {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
+            let (name, description) = match parse_skill_frontmatter(&content) {
+                Some(p) => p,
+                None => continue,
+            };
+            let name_lower = name.to_lowercase();
+            if seen_names.contains(&name_lower) {
+                continue;
+            }
+            seen_names.insert(name_lower);
+            let location = path.to_string_lossy().to_string();
+            out.push(InstalledSkillItem {
+                name,
+                description,
+                location,
+            });
+        }
+    }
+
+    if let Some(proj) = project_path.filter(|s| !s.is_empty()) {
+        let proj_path = Path::new(&proj);
+        for sub in [".opencode/skills", ".agents/skills"] {
+            let root = proj_path.join(sub);
+            if !root.exists() {
+                continue;
+            }
+            let entries = match fs::read_dir(&root) {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if !path.is_dir() {
+                    continue;
+                }
+                let skill_md = path.join("SKILL.md");
+                if !skill_md.is_file() {
+                    continue;
+                }
+                let content = match fs::read_to_string(&skill_md) {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                };
+                let (name, description) = match parse_skill_frontmatter(&content) {
+                    Some(p) => p,
+                    None => continue,
+                };
+                let name_lower = name.to_lowercase();
+                if seen_names.contains(&name_lower) {
+                    continue;
+                }
+                seen_names.insert(name_lower);
+                let location = path.to_string_lossy().to_string();
+                out.push(InstalledSkillItem {
+                    name,
+                    description,
+                    location,
+                });
+            }
+        }
+    }
+
+    Ok(out)
 }
 
 /// Resolve the filesystem path of a globally installed skill by name. Returns the first existing directory under known global roots.
@@ -1395,6 +1509,7 @@ pub fn run() {
             search_skills_via_api,
             install_skill_from_source,
             uninstall_skill,
+            list_installed_skills,
             resolve_global_skill_path,
             read_attachment_file,
         ])

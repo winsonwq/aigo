@@ -20,16 +20,12 @@ import {
   SKILLS_SH_PAGE_SIZE,
 } from "@/api/skillsSh";
 import { toast } from "@/components/ui/sonner";
-import { useDispatch } from "react-redux";
-import type { AppDispatch } from "@/store";
-import { fetchSkills, skillsSlice } from "@/store/slices/skillsSlice";
 
 export function Skills() {
-  const dispatch = useDispatch<AppDispatch>();
   const { confirm: confirmModal } = useConfirmModal();
   const { status } = useOpenCode();
   const { workspacePath } = useWorkspace();
-  /** 始终拉取全局已安装列表（directory undefined），安装/刷新都基于该列表 */
+  /** 已安装列表唯一数据源：磁盘（list_installed_skills），安装/卸载后 refetch 即可 */
   const { skills, isLoading, error, refetch } = useSkills(undefined);
   const { runs: installRuns, addRun } = useRunOutput();
 
@@ -111,7 +107,7 @@ export function Skills() {
     void refetch();
   }, [isConnected, refetch]);
 
-  /** 安装成功时：乐观更新列表、toast、清除 recentlyRemoved、并多次 refetch 以同步服务端列表 */
+  /** URL 安装成功时：toast + 从磁盘 refetch 已安装列表（单一数据源） */
   useEffect(() => {
     const runList = Object.values(installRuns);
     const timeouts: ReturnType<typeof setTimeout>[] = [];
@@ -119,24 +115,6 @@ export function Skills() {
       if (r.status !== "done" || r.exitCode !== 0) continue;
       if (handledSuccessRunIdsRef.current.has(r.runId)) continue;
       handledSuccessRunIdsRef.current.add(r.runId);
-      if (r.skillName) {
-        dispatch(skillsSlice.actions.clearRecentlyRemovedSkill(r.skillName));
-        dispatch(
-          skillsSlice.actions.addOptimisticSkill({
-            name: r.skillName,
-            description: "",
-            location: "",
-          })
-        );
-        // 异步解析真实路径，补全 location 以便显示「打开文件夹」按钮
-        invoke<string>("resolve_global_skill_path", { skillName: r.skillName })
-          .then((loc) => {
-            if (loc?.trim()) {
-              dispatch(skillsSlice.actions.updateOptimisticSkillLocation({ name: r.skillName!, location: loc }));
-            }
-          })
-          .catch(() => {});
-      }
       toast.success("安装成功");
       void refetch();
       timeouts.push(setTimeout(() => void refetch(), 400));
@@ -144,7 +122,7 @@ export function Skills() {
       timeouts.push(setTimeout(() => void refetch(), 2500));
     }
     return () => { timeouts.forEach(clearTimeout); };
-  }, [installRuns, dispatch, refetch]);
+  }, [installRuns, refetch]);
 
   /** 安装失败时 toast（每个 run 只 toast 一次） */
   useEffect(() => {
@@ -291,17 +269,17 @@ export function Skills() {
     if (!selected || typeof selected !== "string") return;
     setInstallLoading(true);
     try {
-      const installedName = await invoke<string>("install_skill_from_zip", {
+      await invoke<{ name: string; description: string }>("install_skill_from_zip", {
         zipPath: selected,
         target: "global",
         projectPath: undefined,
       });
       toast.success("安装成功");
-      if (installedName) dispatch(skillsSlice.actions.clearRecentlyRemovedSkill(installedName));
+      void refetch();
+      await new Promise((r) => setTimeout(r, 400));
+      void refetch();
       await new Promise((r) => setTimeout(r, 800));
-      await dispatch(fetchSkills(undefined));
-      await new Promise((r) => setTimeout(r, 300));
-      await dispatch(fetchSkills(undefined));
+      void refetch();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -315,10 +293,7 @@ export function Skills() {
     await handleInstallFromSource(source, `paste:${source}`, source);
   }
 
-  /**
-   * 卸载：确认 → 后端物理删除 → 乐观更新（removeSkill）→ 延迟后 refetch。
-   * 列表唯一数据源为 API；recentlyRemovedNames 仅用于下一轮 fetch 过滤一次后即清空。
-   */
+  /** 卸载：确认 → 后端物理删除 → 从磁盘 refetch 已安装列表（单一数据源） */
   async function handleUninstall(skill: { name: string; location?: string }) {
     const confirmed = await confirmModal({
       title: "确认卸载",
@@ -340,11 +315,8 @@ export function Skills() {
         skillLocation: rawLocation ?? undefined,
       });
       toast.success("已卸载");
-      // 乐观更新：立即从列表移除，避免被后续可能带缓存的 refetch 覆盖
-      dispatch(skillsSlice.actions.removeSkill(skill.name));
-      // 延迟再拉取一次，给 OpenCode 服务端时间同步文件系统变化
-      await new Promise((r) => setTimeout(r, 400));
-      await refetch();
+      await new Promise((r) => setTimeout(r, 200));
+      void refetch();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -572,9 +544,9 @@ export function Skills() {
           </section>
         </TabsContent>
 
-        <TabsContent value="installed" className="mt-6">
+        <TabsContent value="installed" className="mt-6 flex flex-col flex-1 min-h-0">
           {isConnected && (
-            <div className="mb-4 flex flex-wrap items-center gap-2">
+            <div className="mb-4 flex flex-wrap items-center gap-2 shrink-0">
               <Input
                 type="search"
                 placeholder="按名称、描述或路径筛选…"
@@ -592,57 +564,59 @@ export function Skills() {
               </Button>
             </div>
           )}
-          {isLoading && skills.length === 0 ? (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">加载 Skills…</p>
-          ) : skills.length === 0 ? (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">暂无已安装的 skills。</p>
-          ) : (
-            <List>
-              {filteredSkills.map((s) => (
-                <ListRow key={s.name + (s.location || "")}>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium text-zinc-900 dark:text-zinc-100 truncate" title={s.name}>
-                      {s.name}
+          <div className="flex-1 min-h-0 overflow-auto">
+            {isLoading && skills.length === 0 ? (
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">加载 Skills…</p>
+            ) : skills.length === 0 ? (
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">暂无已安装的 skills。</p>
+            ) : (
+              <List>
+                {filteredSkills.map((s) => (
+                  <ListRow key={s.name + (s.location || "")}>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium text-zinc-900 dark:text-zinc-100 truncate" title={s.name}>
+                        {s.name}
+                      </div>
+                      {s.description && (
+                        <p className="mt-0.5 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
+                          {s.description}
+                        </p>
+                      )}
                     </div>
-                    {s.description && (
-                      <p className="mt-0.5 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
-                        {s.description}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    {s.location && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      {s.location && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-8"
+                          title="打开所在文件夹"
+                          onClick={() => void handleOpenSkillFolder(s.location)}
+                        >
+                          <FolderOpen className="size-4" />
+                        </Button>
+                      )}
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="size-8"
-                        title="打开所在文件夹"
-                        onClick={() => void handleOpenSkillFolder(s.location)}
+                        className="size-8 text-zinc-500 hover:text-red-600 dark:hover:text-red-400"
+                        title="卸载"
+                        disabled={uninstallingName !== null}
+                        onClick={() => void handleUninstall({ name: s.name, location: s.location })}
                       >
-                        <FolderOpen className="size-4" />
+                        {uninstallingName === s.name ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="size-4" />
+                        )}
                       </Button>
-                    )}
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 text-zinc-500 hover:text-red-600 dark:hover:text-red-400"
-                      title="卸载"
-                      disabled={uninstallingName !== null}
-                      onClick={() => void handleUninstall({ name: s.name, location: s.location })}
-                    >
-                      {uninstallingName === s.name ? (
-                        <Loader2 className="size-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="size-4" />
-                      )}
-                    </Button>
-                  </div>
-                </ListRow>
-              ))}
-            </List>
-          )}
+                    </div>
+                  </ListRow>
+                ))}
+              </List>
+            )}
+          </div>
         </TabsContent>
       </Tabs>
 

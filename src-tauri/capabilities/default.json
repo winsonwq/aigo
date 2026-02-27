@@ -17,8 +17,8 @@
     "allow-search-skills-via-cli",
     "allow-search-skills-via-api",
     "allow-install-skill-from-source",
-"allow-uninstall-skill",
-    "allow-resolve-global-skill-path","allow-read-attachment-file",
+"allow-install-skill-from-zip","allow-uninstall-skill",
+    "allow-list-installed-skills","allow-resolve-global-skill-path","allow-read-attachment-file",
     {
       "identifier": "shell:allow-execute",
       "allow": [

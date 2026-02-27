@@ -1,0 +1,5 @@
+# Allow the frontend to list installed skills by reading skill roots from disk (single source of truth).
+[[permission]]
+identifier = "allow-list-installed-skills"
+description = "Enables list_installed_skills to read skill directories and SKILL.md for the installed list."
+commands.allow = ["list_installed_skills"]

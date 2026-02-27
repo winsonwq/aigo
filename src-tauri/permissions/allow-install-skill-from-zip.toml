@@ -1,0 +1,5 @@
+# Allow the frontend to invoke install_skill_from_zip (extract zip to skills dir).
+[[permission]]
+identifier = "allow-install-skill-from-zip"
+description = "Enables install_skill_from_zip to extract skill zip to global or project skills directory."
+commands.allow = ["install_skill_from_zip"]
