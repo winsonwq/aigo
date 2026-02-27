@@ -4,6 +4,7 @@ import { store } from "@/store";
 import { WorkspaceProvider } from "@/context/WorkspaceContext";
 import { OpenCodeProvider } from "@/context/OpenCodeContext";
 import { ConfirmModalProvider } from "@/components/ConfirmModal";
+import { RunOutputProvider } from "@/context/RunOutputContext";
 import { Toaster } from "@/components/ui/sonner";
 import { Layout } from "@/components/Layout";
 import { Home } from "@/pages/Home";
@@ -18,7 +19,8 @@ function App() {
     <Provider store={store}>
       <WorkspaceProvider>
         <OpenCodeProvider>
-          <ConfirmModalProvider>
+          <RunOutputProvider>
+            <ConfirmModalProvider>
             <BrowserRouter>
               <Routes>
                 <Route element={<Layout />}>
@@ -32,6 +34,7 @@ function App() {
             </BrowserRouter>
             <Toaster />
           </ConfirmModalProvider>
+          </RunOutputProvider>
         </OpenCodeProvider>
       </WorkspaceProvider>
     </Provider>
