@@ -17,6 +17,8 @@ AIGO：项目脚手架与协作基线，包含文档结构、提交规范与 Age
 | [docs/git-commit.md](docs/git-commit.md)                 | Git 提交规范 (Conventional Commits)                     |
 | [docs/implementation.md](docs/implementation.md)         | 实现最佳实践（CSS 变量、TS、React、目录约定）           |
 | [docs/openwork-reference.md](docs/openwork-reference.md) | 从 OpenWork 可参考的基础功能与 OpenCode Client 使用方式 |
+| [docs/design-runtime-bundling.md](docs/design-runtime-bundling.md) | 运行时准备与内置（设计文档：打包时 Node/Git/Python 等） |
+| [docs/user-environment.md](docs/user-environment.md)     | 用户环境准备（本机需备环境与自检；运行时准备见设计文档） |
 
 ## 开发约定
 

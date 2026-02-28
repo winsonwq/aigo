@@ -20,6 +20,8 @@ pnpm tauri build  # 打包桌面应用
 
 详见 [AGENTS.md](AGENTS.md) 中的文档索引。
 
+**使用已打包应用时**：若要在应用内使用 Skills 搜索、从 GitHub 等来源安装或卸载 Skill，本机需提前安装 [Node.js（含 npx）与 Git](docs/user-environment.md)；仅「从 zip 安装」则不需要。详见 [docs/user-environment.md](docs/user-environment.md)。
+
 ## IDE
 
 推荐 [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)。
