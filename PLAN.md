@@ -200,6 +200,11 @@ OpenWork 与 OpenCode 的通信方式、API 用法、可选方案已整理到 **
   - 使用 `createOpencodeClient({ baseUrl })` 连接；`client.session` 做会话 CRUD；`client.session.prompt()` 发消息（同步）。
   - 使用 **`client.event.subscribe()`** 订阅 SSE，处理 `message.part.updated` 等实现流式对话；健康检查用 `client.global.health()`，用于重连与状态展示。
 - **流式对话**：先 `event.subscribe()` 再 `session.prompt()`，在回调里按 `sessionID` 过滤并更新 UI（与 OpenWork 一致）。
+- **模型与 Provider 配置（free / OpenRouter 与界面配置）**
+  - OpenCode 有部分 **free** 模型（如 OpenRouter 上的 `z-ai/glm-4.5-air:free`）可直接使用；**多数模型**（含 OpenRouter 上的 MiniMax、Kimi 等）需要**配置或授权**后才能使用。
+  - **配置方式**：① **opencode.json**（全局 `~/.config/opencode/opencode.json` 或项目根）中的 `provider`、`model`；② **环境变量**（如 OpenRouter 使用 `OPENAI_API_BASE=https://openrouter.ai/api/v1`、`OPENAI_API_KEY=<key>`）；③ **`opencode auth login`**，凭证存于 `~/.local/share/opencode/auth.json`。
+  - **OpenWork 在界面上的做法**：沿用 OpenCode 的配置体系（显式配置、不依赖自动探测）；桌面端提供 **Settings**，内含 **Provider/凭证管理**——查看已连接账户、用量统计、切换账户、删除单项凭证等，用户可在界面完成授权与切换（与 OpenCode 官方桌面应用的 Settings 一致）。
+  - **AIGO 建议**：在设置页增加「Provider/模型配置」说明与引导（如 opencode.json 路径、环境变量说明、或提示使用 `opencode auth login`）；后续可评估在 UI 中集成配置或授权入口，与 OpenWork 对齐体验。详见 [docs/openwork-reference.md](docs/openwork-reference.md) 与 OpenCode 文档 [Config](https://opencode.ai/docs/config)、[CLI - auth](https://opencode.ai/docs/cli/)。
 - **可选：SQLite 直读**：若需要与 OpenWork 一致的会话列表性能或离线历史，可读 `~/.opencode/opencode.db`（或项目内 `.opencode/opencode.db`）的 `sessions` / `messages` 表；表结构见 openwork-reference.md。
 - **可选：MCP Bridge**：若需要「权限在桌面端弹窗」「流式进度」「自定义工具（如原生文件选择）」再考虑让 AIGO 作为 MCP 服务被 OpenCode 连接；OpenWork 通过 opencode-bridge 实现。
 - **可选：执行计划 / Todos**：将 OpenCode 的 todos 渲染为时间线（OpenWork 的 execution plan）；可在「消息/工具展示」之后加一子任务。
@@ -212,7 +217,7 @@ OpenWork 与 OpenCode 的通信方式、API 用法、可选方案已整理到 **
 ## 备注
 
 - **OpenCode 文档**：事件与插件见 [OpenCode 插件](https://www.opencodecn.com/docs/plugins)、[opencode.ai/docs/sdk](https://opencode.ai/docs/sdk/)；Skills 见 [opencode.ai/docs/skills](https://opencode.ai/docs/skills/)。
-- **OpenWork 参考**：[different-ai/openwork](https://github.com/different-ai/openwork)；sidecar/安装 [Issue #121](https://github.com/different-ai/openwork/issues/121)；**基础功能与 Client 用法** → [docs/openwork-reference.md](docs/openwork-reference.md)。
+- **OpenWork 参考**：[different-ai/openwork](https://github.com/different-ai/openwork)；sidecar/安装 [Issue #121](https://github.com/different-ai/openwork/issues/121)；**基础功能与 Client 用法** → [docs/openwork-reference.md](docs/openwork-reference.md)。**模型与 Provider**：部分 free 模型可直接用，OpenRouter 等需配置或授权；OpenWork 在 Settings 中提供 Provider/凭证管理；详见 PLAN「从 OpenWork 可参考的基础功能」与 openwork-reference 6.1。
 - **本地能力扩展**：阶段 7 以「默认包不增容、以 SKILL 方式出现与扩展」为原则；ffmpeg、whisper、Python/Node、agent browser 等均以 SKILL 封装，应用层只提供通用发现/配置/调用机制，便于未来兼容与独立演进。
 - **Subagent 可见性**：阶段 8 解决当前会话内看不到子任务/子 agent 输出的问题，依赖 OpenCode 事件或消息结构的调研结果。
 - **机器人模式（阶段 9）**：调研分三部分——① OpenClaw 的 bot、安全、IM 网管、本地文件/命令防护、授权、cron；② 结合 OpenCode 的插件/MCP/Skills、权限模型与会话模型；③ **落地技术方案与实施计划**（架构选型、组件划分、阶段与排期）。三部分结论写入设计文档（如 `docs/robot-mode-design.md`）后再拆实现任务。目标为「远程用户通过 IM 与本地 AI 协作」且安全可控。

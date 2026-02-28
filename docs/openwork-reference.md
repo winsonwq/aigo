@@ -152,6 +152,18 @@ OpenCode 服务端具备**会话标题自动更新**能力：在用户发送首�
 
 ---
 
+## 6.1 模型与 Provider 配置：free 与 OpenRouter、界面配置
+
+- **Free 与需授权模型**：OpenCode 通过 OpenRouter 等 provider 使用模型时，有部分 **free** 模型（如 `openrouter/z-ai/glm-4.5-air:free`）可直接使用；多数模型（如 MiniMax、Kimi 等）需要配置 API 密钥或通过 `opencode auth login` 授权后才能使用。
+- **配置方式**：
+  - **opencode.json**：全局 `~/.config/opencode/opencode.json` 或项目根 `opencode.json` 中的 `provider`、`model`；provider 可配 `options.apiKey`（或使用 `{env:VAR}` / `{file:path}` 引用）。
+  - **环境变量**：例如 OpenRouter 使用 `OPENAI_API_BASE=https://openrouter.ai/api/v1`、`OPENAI_API_KEY=<key>`；其他 provider 见 [OpenCode Config](https://opencode.ai/docs/config)、[Providers](https://opencode.ai/docs/providers)。
+  - **CLI 授权**：`opencode auth login` 配置各 provider 的 API 密钥，凭证存于 `~/.local/share/opencode/auth.json`；`opencode auth list` / `opencode auth logout` 可查看或清除。
+- **OpenWork 界面做法**：桌面端 **Settings** 提供 Provider/凭证管理——已连接账户、用量、切换账户、删除凭证等，用户在 UI 内完成授权与切换，无需手改 opencode.json 或环境变量。配置仍由 OpenCode 的 opencode.json + auth.json 承载，OpenWork 通过 OpenCode 的配置与 API 读写这些状态并在界面展示。
+- **AIGO 可参考**：在设置页增加「Provider/模型配置」说明与引导（文档链接、opencode.json 路径、`opencode auth login` 提示）；后续可评估在 UI 中集成配置或授权入口，与 OpenWork 对齐。
+
+---
+
 ## 7. 参考链接
 
 - [different-ai/openwork](https://github.com/different-ai/openwork)
