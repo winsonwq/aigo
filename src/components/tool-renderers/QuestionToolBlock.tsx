@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import {
   AssistantCollapsibleBlock,
   getBlockLabel,
@@ -7,6 +7,7 @@ import { QuestionsBlock, getQuestionsPayloadFromToolState } from "@/components/Q
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
 import type { ToolPart, ToolRenderContext } from "./types";
+import { useExpandedWithAutoCollapse } from "./useExpandedWithAutoCollapse";
 
 const INCOMPLETE_QUESTION_REFETCH_DELAY_MS = 600;
 
@@ -25,9 +26,9 @@ export function QuestionToolBlock({
   const isWaiting = status === "running" || status === "pending";
   const questionAlreadyAnswered =
     !!context.nextUserMessageText && context.nextUserMessageText.startsWith("我选择：");
-  const [expanded, setExpanded] = useState(
-    defaultOpen !== undefined ? defaultOpen : !!questionsPayload || isWaiting
-  );
+  const defaultExpanded = defaultOpen !== undefined ? defaultOpen : !!questionsPayload || isWaiting;
+  const isCompleted = questionAlreadyAnswered || status === "completed" || status === "error";
+  const [expanded, setExpanded] = useExpandedWithAutoCollapse(defaultExpanded, isCompleted);
   const refetchTriggeredRef = useRef(false);
   const isIncompleteQuestion = questionsPayload == null && isWaiting;
 

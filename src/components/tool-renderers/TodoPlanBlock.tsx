@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   AssistantCollapsibleBlock,
   getBlockLabel,
@@ -6,6 +5,7 @@ import {
 import { SummarySuffix } from "./SummarySuffix";
 import type { ToolPart, ToolRenderContext } from "./types";
 import { getPartsStatus } from "./statusHelpers";
+import { useExpandedWithAutoCollapse } from "./useExpandedWithAutoCollapse";
 
 function parseTodoItems(parts: ToolPart[]): { text: string; done: boolean }[] {
   const items: { text: string; done: boolean }[] = [];
@@ -63,10 +63,10 @@ export function TodoPlanBlock({
   defaultOpen: boolean;
   stableKeyPrefix: string;
 }) {
-  const [expanded, setExpanded] = useState(defaultOpen);
   const items = parseTodoItems(parts);
   const doneCount = items.filter((i) => i.done).length;
   const { isAnyRunning, statusLabel, statusVariant } = getPartsStatus(parts);
+  const [expanded, setExpanded] = useExpandedWithAutoCollapse(defaultOpen, !isAnyRunning);
   const label = getBlockLabel("计划中", "执行计划", isAnyRunning);
 
   return (

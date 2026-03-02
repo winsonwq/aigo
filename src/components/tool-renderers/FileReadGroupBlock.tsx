@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   AssistantCollapsibleBlock,
   getBlockLabel,
@@ -8,6 +7,7 @@ import { SummarySuffix } from "./SummarySuffix";
 import type { ToolPart, ToolRenderContext } from "./types";
 import { getPartsStatus } from "./statusHelpers";
 import { TOOL_READ, TOOL_GREP, TOOL_GLOB, TOOL_LIST } from "./utils";
+import { useExpandedWithAutoCollapse } from "./useExpandedWithAutoCollapse";
 
 /** 读/搜文件分组块：摘要行状态 + 关键内容提示，展开后直接展示每项详情 */
 export function FileReadGroupBlock({
@@ -20,8 +20,8 @@ export function FileReadGroupBlock({
   defaultOpen: boolean;
   stableKeyPrefix: string;
 }) {
-  const [expanded, setExpanded] = useState(defaultOpen);
   const { isAnyRunning, statusLabel, statusVariant } = getPartsStatus(parts);
+  const [expanded, setExpanded] = useExpandedWithAutoCollapse(defaultOpen, !isAnyRunning);
   const label = getBlockLabel("浏览中", "已浏览", isAnyRunning);
 
   const summaryHint =

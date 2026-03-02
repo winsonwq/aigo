@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { FilePen } from "lucide-react";
 import {
   AssistantCollapsibleBlock,
@@ -9,6 +8,7 @@ import type { ToolPart, ToolRenderContext } from "./types";
 import type { FileOp } from "./utils";
 import { getFileWritePath, getFileWriteOp } from "./utils";
 import { getPartsStatus } from "./statusHelpers";
+import { useExpandedWithAutoCollapse } from "./useExpandedWithAutoCollapse";
 
 /** 写文件分组块：摘要行状态 + 路径提示，展开后每文件「写入/编辑/补丁 + 路径」及具体内容 */
 export function FileWriteGroupBlock({
@@ -20,7 +20,6 @@ export function FileWriteGroupBlock({
   defaultOpen: boolean;
   stableKeyPrefix: string;
 }) {
-  const [expanded, setExpanded] = useState(defaultOpen);
   const byPath = new Map<string, { op: FileOp; part: ToolPart }[]>();
   parts.forEach((part, idx) => {
     const path = getFileWritePath(part.state?.input as Record<string, unknown> | undefined);
@@ -51,6 +50,7 @@ export function FileWriteGroupBlock({
         : `修改了 ${pathList.length} 个文件`;
 
   const { isAnyRunning, statusLabel, statusVariant } = getPartsStatus(parts);
+  const [expanded, setExpanded] = useExpandedWithAutoCollapse(defaultOpen, !isAnyRunning);
   const label = getBlockLabel("写入中", "已写入", isAnyRunning);
   const opVerb = (op: FileOp) => (op === "新建" ? "写入" : op === "补丁" ? "补丁" : "编辑");
 
@@ -103,22 +103,24 @@ export function FileWriteGroupBlock({
                 )}
               </div>
               {isPathMissing && (
-                <div className="border-t border-zinc-200/80 px-2 pb-2 pt-1 dark:border-zinc-600/80">
-                  <div className="mb-1.5">
-                    <span className="text-[10px] text-zinc-500 dark:text-zinc-400">原始输入</span>
-                    <pre className="mt-0.5 max-h-32 overflow-auto rounded bg-zinc-100 px-2 py-1.5 font-mono text-[11px] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
-                      {part.state?.input != null
-                        ? JSON.stringify(part.state.input, null, 2)
-                        : "—"}
-                    </pre>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-zinc-500 dark:text-zinc-400">原始输出</span>
-                    <pre className="mt-0.5 max-h-32 overflow-auto rounded bg-zinc-100 px-2 py-1.5 font-mono text-[11px] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
-                      {part.state?.output != null && String(part.state.output).trim() !== ""
-                        ? String(part.state.output)
-                        : "—"}
-                    </pre>
+                <div className="border-t border-zinc-200/80 px-2 pb-2 pt-1.5 dark:border-zinc-600/80">
+                  <div className="rounded bg-zinc-100 dark:bg-zinc-800/80 px-2 py-1.5 space-y-2">
+                    <div>
+                      <span className="text-[10px] text-zinc-500 dark:text-zinc-400">原始输入</span>
+                      <pre className="mt-0.5 max-h-24 overflow-auto font-mono text-[11px] text-zinc-700 dark:text-zinc-200 whitespace-pre-wrap break-all">
+                        {part.state?.input != null
+                          ? JSON.stringify(part.state.input, null, 2)
+                          : "—"}
+                      </pre>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-zinc-500 dark:text-zinc-400">原始输出</span>
+                      <pre className="mt-0.5 max-h-24 overflow-auto font-mono text-[11px] text-zinc-700 dark:text-zinc-200 whitespace-pre-wrap break-all">
+                        {part.state?.output != null && String(part.state.output).trim() !== ""
+                          ? String(part.state.output)
+                          : "—"}
+                      </pre>
+                    </div>
                   </div>
                 </div>
               )}

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { markdownLinkComponents } from "@/components/MarkdownLink";
@@ -10,6 +9,7 @@ import {
 import { SummarySuffix } from "./SummarySuffix";
 import type { ToolPart, ToolRenderContext } from "./types";
 import { getPartStatus } from "./statusHelpers";
+import { useExpandedWithAutoCollapse } from "./useExpandedWithAutoCollapse";
 
 /** websearch：摘要「搜索中/已搜索」+ 查询词，展开后查询一句 + 结果正文 */
 export function WebsearchToolBlock({
@@ -20,8 +20,8 @@ export function WebsearchToolBlock({
   context: ToolRenderContext;
   defaultOpen: boolean;
 }) {
-  const [expanded, setExpanded] = useState(defaultOpen);
   const { isCalling, statusLabel, statusVariant } = getPartStatus(part);
+  const [expanded, setExpanded] = useExpandedWithAutoCollapse(defaultOpen, !isCalling);
   const toolInput = part.state?.input as Record<string, unknown> | undefined;
   const querySummary =
     toolInput && typeof toolInput.query === "string"

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   AssistantCollapsibleBlock,
   getBlockLabel,
@@ -7,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
 import type { ToolPart, ToolRenderContext } from "./types";
 import { getPartStatus } from "./statusHelpers";
+import { useExpandedWithAutoCollapse } from "./useExpandedWithAutoCollapse";
 
 export function GenericToolBlock({
   part,
@@ -16,8 +16,8 @@ export function GenericToolBlock({
   context: ToolRenderContext;
   defaultOpen: boolean;
 }) {
-  const [expanded, setExpanded] = useState(defaultOpen);
   const { status, isCalling, statusLabel, statusVariant } = getPartStatus(part);
+  const [expanded, setExpanded] = useExpandedWithAutoCollapse(defaultOpen, !isCalling);
   const hasDetails =
     (part.state?.input && Object.keys(part.state.input).length > 0) ||
     (part.state?.output != null && part.state.output !== "") ||

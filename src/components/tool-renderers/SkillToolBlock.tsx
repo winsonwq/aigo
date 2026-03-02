@@ -1,4 +1,3 @@
-import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { markdownLinkComponents } from "@/components/MarkdownLink";
@@ -10,6 +9,7 @@ import {
 import { SummarySuffix } from "./SummarySuffix";
 import type { ToolPart, ToolRenderContext } from "./types";
 import { getPartStatus } from "./statusHelpers";
+import { useExpandedWithAutoCollapse } from "./useExpandedWithAutoCollapse";
 
 /** skill：使用了技能 <name>，可折叠展示内容 */
 export function SkillToolBlock({
@@ -20,8 +20,8 @@ export function SkillToolBlock({
   context: ToolRenderContext;
   defaultOpen: boolean;
 }) {
-  const [expanded, setExpanded] = useState(defaultOpen);
   const { isCalling, statusLabel, statusVariant } = getPartStatus(part);
+  const [expanded, setExpanded] = useExpandedWithAutoCollapse(defaultOpen, !isCalling);
   const input = part.state?.input as Record<string, unknown> | undefined;
   const name =
     (typeof input?.name === "string" ? input.name : null) ??
