@@ -36,11 +36,19 @@ export function AssistantCollapsibleBlock({
   summarySuffix,
   children,
 }: AssistantCollapsibleBlockProps) {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onSummaryClick(e as unknown as React.MouseEvent);
+    }
+  };
   return (
     <div className="text-sm text-zinc-500 dark:text-zinc-400">
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onSummaryClick}
+        onKeyDown={handleKeyDown}
         className="flex w-full cursor-pointer list-none items-center gap-1.5 py-0.5 text-left"
       >
         <span className="font-medium">{label}</span>
@@ -50,7 +58,7 @@ export function AssistantCollapsibleBlock({
           <ChevronRight className="h-3.5 w-3.5 shrink-0 text-zinc-400 dark:text-zinc-500" />
         )}
         {summarySuffix}
-      </button>
+      </div>
       {open && children != null && (
         <div className="assistant-collapsible-content mt-2 text-zinc-600 dark:text-zinc-400">
           {children}

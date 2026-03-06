@@ -114,30 +114,32 @@ function ModelSelect({
                   >
                     {group.label}
                   </div>
-                  {group.options.map((opt) => (
-                    <li
-                      key={opt.value}
-                      role="option"
-                      aria-selected={opt.value === value}
-                      onClick={() => {
-                        onChange(opt.value);
-                        setOpen(false);
-                      }}
-                      className={cn(
-                        "cursor-pointer px-2.5 py-1.5 text-xs text-zinc-900 dark:text-zinc-100",
-                        variant === "bordered" &&
-                          "hover:bg-zinc-100 dark:hover:bg-zinc-800",
-                        variant === "filled" &&
-                          "hover:bg-zinc-200 dark:hover:bg-zinc-700",
-                        opt.value === value &&
-                          (variant === "bordered"
-                            ? "bg-zinc-100 dark:bg-zinc-800"
-                            : "bg-zinc-200 dark:bg-zinc-700")
-                      )}
-                    >
-                      <span className="block truncate font-medium">{opt.label}</span>
-                    </li>
-                  ))}
+                  <ul role="group" aria-label={group.label} className="list-none">
+                    {group.options.map((opt) => (
+                      <li
+                        key={opt.value}
+                        role="option"
+                        aria-selected={opt.value === value}
+                        onClick={() => {
+                          onChange(opt.value);
+                          setOpen(false);
+                        }}
+                        className={cn(
+                          "cursor-pointer px-2.5 py-1.5 text-xs text-zinc-900 dark:text-zinc-100",
+                          variant === "bordered" &&
+                            "hover:bg-zinc-100 dark:hover:bg-zinc-800",
+                          variant === "filled" &&
+                            "hover:bg-zinc-200 dark:hover:bg-zinc-700",
+                          opt.value === value &&
+                            (variant === "bordered"
+                              ? "bg-zinc-100 dark:bg-zinc-800"
+                              : "bg-zinc-200 dark:bg-zinc-700")
+                        )}
+                      >
+                        <span className="block truncate font-medium">{opt.label}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </li>
               ))
             : options.map((opt) => (

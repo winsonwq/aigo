@@ -57,7 +57,12 @@ export const fetchSessions = createAsyncThunk<
       ? (data as unknown as Record<string, unknown>[])
       : data?.[200];
     if (!Array.isArray(rawList)) return [];
-    return normalizeList(rawList);
+    // 仅展示顶层会话，不展示 subagent/子任务会话（带 parentID 的会话不出现在侧栏）
+    const topLevel = rawList.filter(
+      (s: Record<string, unknown>) =>
+        !(s.parentID ?? s.parent_id ?? (s as { parentId?: unknown }).parentId)
+    );
+    return normalizeList(topLevel);
   }
 );
 

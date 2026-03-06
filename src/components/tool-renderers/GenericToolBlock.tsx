@@ -10,6 +10,8 @@ import { useExpandedWithAutoCollapse } from "./useExpandedWithAutoCollapse";
 
 export function GenericToolBlock({
   part,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- same props shape as other tool blocks
+  context: _context,
   defaultOpen,
 }: {
   part: ToolPart;
@@ -27,13 +29,6 @@ export function GenericToolBlock({
     toolInput && typeof toolInput === "object" && "url" in toolInput
       ? String((toolInput as { url?: unknown }).url ?? "")
       : "";
-  const isSubagentCall =
-    part.tool.toLowerCase().includes("subagent") ||
-    part.tool.toLowerCase().includes("task") ||
-    (toolInput &&
-      typeof toolInput === "object" &&
-      "subagent_type" in toolInput &&
-      typeof (toolInput as { subagent_type?: unknown }).subagent_type === "string");
   const summaryText = part.state?.error
     ? String(part.state.error)
     : inputUrl || String(part.state?.title ?? "");
@@ -56,9 +51,6 @@ export function GenericToolBlock({
           <span className="shrink-0 font-mono font-medium text-zinc-800 dark:text-zinc-200">
             {part.tool}
           </span>
-          {isSubagentCall && (
-            <span className="shrink-0 text-[10px] text-zinc-500 dark:text-zinc-400">subagent</span>
-          )}
           {!!summaryText && (
             <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-500 dark:text-zinc-400">
               {summaryText}
@@ -69,9 +61,6 @@ export function GenericToolBlock({
     >
       {hasDetails ? (
         <div className="space-y-2 px-2 pb-2 pt-1.5">
-          {isSubagentCall && (
-            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">子代理调用详情</p>
-          )}
           {part.state?.input && Object.keys(part.state.input).length > 0 && (
             <div>
               <div className="mb-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">输入</div>

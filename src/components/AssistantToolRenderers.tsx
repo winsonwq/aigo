@@ -5,6 +5,8 @@ export {
   renderToolPart,
   renderToolSegment,
   groupConsecutiveToolParts,
+  getSubagentCommand,
+  getSubagentOutput,
   type ToolPart,
   type ToolRenderContext,
   type ToolGroupKind,

@@ -171,6 +171,8 @@ OpenCode 服务端具备**会话标题自动更新**能力：在用户发送首�
 - [OpenCode Server API](https://opencode.ai/docs/server/)
 - [OpenCode SDK](https://opencode.ai/docs/sdk/)
 
+**子任务 / SSE 监听**：OpenCode 的 `/event` 全量广播、无 session 过滤；子任务事件与主会话事件混在同一流。AIGO 采用「任意 `message.part.updated` / `session.idle` 均 refetch 主会话」、不依赖轮询。详见 [subagent-sse-research.md](subagent-sse-research.md)。
+
 ---
 
 ## 8. OpenWork UI 与交互参考（对话、工具、Skills）
