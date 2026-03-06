@@ -48,7 +48,7 @@ export function ThinkingBlock({ part, isStreaming }: ThinkingBlockProps) {
       onSummaryClick={onSummaryClick}
     >
       {text ? (
-        <div className="assistant-thinking-content markdown-content">
+        <div className="assistant-thinking-content markdown-content text-[11px] leading-relaxed">
           <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownLinkComponents}>{text}</ReactMarkdown>
         </div>
       ) : undefined}

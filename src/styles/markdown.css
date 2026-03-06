@@ -11,6 +11,18 @@
   line-height: 1.6;
 }
 
+/* Thinking/Thought 展开区：略小字号 */
+.assistant-thinking-content.markdown-content {
+  font-size: 0.8125rem; /* 13px */
+  line-height: 1.5;
+}
+
+/* 子任务输出区：小字号 */
+.subagent-output-content.markdown-content {
+  font-size: 0.6875rem; /* 11px */
+  line-height: 1.5;
+}
+
 /* 段落 */
 .markdown-content p {
   margin-top: 0.375em;

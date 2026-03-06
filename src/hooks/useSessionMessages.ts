@@ -33,13 +33,26 @@ function isDebugMessages(): boolean {
   }
 }
 
+/** 是否输出 SSE/子任务相关调试日志（?debug=1 或 aigo.debugMessages 或 aigo.debugSubagent） */
+function isDebugSse(): boolean {
+  try {
+    if (typeof window === "undefined") return false;
+    if (new URLSearchParams(window.location.search).get("debug") === "1") return true;
+    return localStorage.getItem(DEBUG_MESSAGES_KEY) === "true" || localStorage.getItem("aigo.debugSubagent") === "true";
+  } catch {
+    return false;
+  }
+}
+
 export type { MessageWithParts, PermissionRequest, MessageInfo, MessagePart, TextPart, ToolPart };
 
 export type UseSessionMessagesOptions = Record<string, never>;
 
+const EMPTY_MESSAGES: MessageWithParts[] = [];
+
 function selectMessages(state: RootState, sessionId: string | undefined): MessageWithParts[] {
-  if (!sessionId) return [];
-  return state.messages.messagesBySession[sessionId] ?? [];
+  if (!sessionId) return EMPTY_MESSAGES;
+  return state.messages.messagesBySession[sessionId] ?? EMPTY_MESSAGES;
 }
 
 function selectIsLoading(state: RootState, sessionId: string | undefined): boolean {
@@ -83,6 +96,7 @@ export function useSessionMessages(
   const pendingPermission = useSelector(selectPendingPermission);
 
   const sessionIdRef = useRef(sessionId);
+  const prevSessionIdRef = useRef<string | undefined>(sessionId);
   const fallbackBusyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const unmountedRef = useRef(false);
@@ -110,12 +124,13 @@ export function useSessionMessages(
     void dispatch(fetchMessages(sessionId));
   }, [sessionId, dispatch]);
 
-  // When sessionId changes, clear pending permission if it was for another session
+  // 仅当用户切走「发起权限请求的那条会话」时清除弹窗；子任务(subagent) 的 permission 的 sessionID 与主会话不同，不能因 sessionID !== sessionId 就清除，否则 glob 等子任务会一直等权限导致卡死
   useEffect(() => {
-    if (sessionId && pendingPermission && pendingPermission.sessionID !== sessionId) {
+    const prev = prevSessionIdRef.current;
+    prevSessionIdRef.current = sessionId;
+    if (prev != null && prev !== sessionId && pendingPermission?.sessionID === prev) {
       dispatch(messagesSlice.actions.setPendingPermission(null));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only clear when sessionId or permission session mismatch
   }, [sessionId, pendingPermission?.sessionID, dispatch]);
 
   // Fallback busy timeout: after 5 min clear busy and set message
@@ -144,14 +159,32 @@ export function useSessionMessages(
   // SSE: subscribe to events and refresh messages / set pending permission
   useEffect(() => {
     const debug = isDebugMessages();
+    const debugSse = isDebugSse();
     if (!client || !sessionId) return;
 
     let cancelled = false;
+    console.log("[aigo:sse] subscribe sessionId=", sessionId);
+    if (debugSse) console.log("[aigo:sse] subscribe start sessionId=", sessionId);
 
     const triggerRefresh = () => {
       if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
       refreshDebounceRef.current = setTimeout(() => {
         if (!cancelled && !unmountedRef.current) {
+          // #region agent log
+          fetch("http://127.0.0.1:7384/ingest/52a81ad1-6528-4dca-9c42-33bc440a4a2f", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "fa953f" },
+            body: JSON.stringify({
+              sessionId: "fa953f",
+              hypothesisId: "C",
+              location: "useSessionMessages.ts:triggerRefresh",
+              message: "SSE triggerRefresh",
+              data: { sessionId: sessionIdRef.current },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {});
+          // #endregion
+          if (debugSse) console.log("[aigo:sse] triggerRefresh -> fetchMessages sessionId=", sessionIdRef.current);
           void dispatch(fetchMessages(sessionId));
         }
       }, 200);
@@ -162,9 +195,11 @@ export function useSessionMessages(
         const result = await client.event.subscribe();
         const stream = result?.stream;
         if (!stream || typeof stream[Symbol.asyncIterator] !== "function") {
-          if (debug) console.log("[aigo:sse] no stream or stream not iterable");
+          console.warn("[aigo:sse] no stream or stream not iterable");
           return;
         }
+        console.log("[aigo:sse] stream ready sessionId=", sessionId);
+        if (debugSse) console.log("[aigo:sse] stream ready, listening for sessionId=", sessionId);
 
         for await (const ev of stream as AsyncGenerator<{
           type?: string;
@@ -177,14 +212,25 @@ export function useSessionMessages(
 
           const evSessionId =
             ev.properties?.part?.sessionID ?? ev.properties?.sessionID;
-          if (evSessionId && evSessionId !== sessionIdRef.current) continue;
+          const match = !evSessionId || evSessionId === sessionIdRef.current;
+          if (debugSse) {
+            console.log("[aigo:sse] ev", ev?.type, "evSessionId=", evSessionId, "mySessionId=", sessionIdRef.current, "match=", match);
+          }
 
           if (
-            ev?.type === "permission.asked" &&
-            ev.properties?.sessionID === sessionIdRef.current
+            ev?.type === "message.part.updated" ||
+            ev?.type === "session.idle"
           ) {
+            if (debugSse) console.log("[aigo:sse] triggerRefresh (ev.type=", ev?.type, ")");
+            triggerRefresh();
+            continue;
+          }
+
+          // 任意会话的权限请求都展示弹窗（含子任务/subagent），否则子任务执行 glob 等时的 permission.asked 会被主会话过滤掉导致卡住
+          if (ev?.type === "permission.asked") {
             const req = ev.properties as PermissionRequest;
-            if (req.id && req.sessionID) {
+            if (req?.id && req?.sessionID) {
+              if (debugSse) console.log("[aigo:sse] permission.asked sessionID=", req.sessionID);
               dispatch(
                 messagesSlice.actions.setPendingPermission({
                   id: req.id,
@@ -200,19 +246,14 @@ export function useSessionMessages(
                 })
               );
             }
+            continue;
           }
-          if (
-            ev?.type === "permission.replied" &&
-            ev.properties?.sessionID === sessionIdRef.current
-          ) {
+          if (ev?.type === "permission.replied") {
             dispatch(messagesSlice.actions.setPendingPermission(null));
+            continue;
           }
-          if (
-            ev?.type === "message.part.updated" ||
-            ev?.type === "session.idle"
-          ) {
-            triggerRefresh();
-          }
+
+          if (evSessionId && evSessionId !== sessionIdRef.current) continue;
         }
       } catch (e) {
         if (debug) console.warn("[aigo:sse] subscribe failed", e);
@@ -221,6 +262,7 @@ export function useSessionMessages(
 
     return () => {
       cancelled = true;
+      console.log("[aigo:sse] subscribe cleanup sessionId=", sessionId);
       if (refreshDebounceRef.current) {
         clearTimeout(refreshDebounceRef.current);
         refreshDebounceRef.current = null;

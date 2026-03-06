@@ -7,8 +7,12 @@ import {
   isQuestionTool,
   isWebsearchTool,
   isBashTool,
+  isSubagentTool,
+  getSubagentCommand,
+  getSubagentOutput,
 } from "./utils";
 import { GenericToolBlock } from "./GenericToolBlock";
+import { SubagentToolBlock } from "./SubagentToolBlock";
 import { WebsearchToolBlock } from "./WebsearchToolBlock";
 import { BashToolBlock } from "./BashToolBlock";
 import { WebfetchToolBlock } from "./WebfetchToolBlock";
@@ -19,7 +23,7 @@ import { SkillToolBlock } from "./SkillToolBlock";
 import { QuestionToolBlock } from "./QuestionToolBlock";
 
 export type { ToolPart, ToolRenderContext, ToolGroupKind };
-export { groupConsecutiveToolParts };
+export { groupConsecutiveToolParts, getSubagentCommand, getSubagentOutput };
 
 /**
  * 根据工具类型选择渲染方式；非完成时默认展开，完成后默认收起。
@@ -49,6 +53,16 @@ export function renderToolPart(
   if (isBashTool(part)) {
     return (
       <BashToolBlock
+        key={stableKey}
+        part={part}
+        context={context}
+        defaultOpen={defaultOpen}
+      />
+    );
+  }
+  if (isSubagentTool(part)) {
+    return (
+      <SubagentToolBlock
         key={stableKey}
         part={part}
         context={context}
@@ -185,6 +199,15 @@ export function renderToolSegment(
                   defaultOpen={defaultOpenForParts([part])}
                 />
               ))}
+            </Fragment>
+          );
+        }
+        if (group.kind === "subagent") {
+          return (
+            <Fragment key={key}>
+              {group.parts.map((part, idx) =>
+                renderToolPart(part, context, `${key}-${idx}`)
+              )}
             </Fragment>
           );
         }

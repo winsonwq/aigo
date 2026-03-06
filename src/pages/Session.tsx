@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { markdownLinkComponents } from "@/components/MarkdownLink";
 import remarkGfm from "remark-gfm";
-import { ArrowUp, Paperclip, Square } from "lucide-react";
+import { ArrowUp, Paperclip, PanelRightOpen, Square, X } from "lucide-react";
 import { MessageInput, type MessageInputRef } from "@/components/MessageInput";
 import {
   AttachmentChips,
@@ -12,8 +12,12 @@ import {
 } from "@/components/AttachmentChips";
 import {
   renderToolSegment,
+  getSubagentCommand,
+  getSubagentOutput,
   type ToolRenderContext,
+  type ToolPart as ToolPartRender,
 } from "@/components/AssistantToolRenderers";
+import { getSubagentSessionId } from "@/components/tool-renderers/utils";
 import { ThinkingBlock } from "@/components/ThinkingBlock";
 import { Button } from "@/components/ui/button";
 import { ModelSelect } from "@/components/ui/model-select";
@@ -88,6 +92,257 @@ function groupMessagesByTurn(list: MessageWithParts[]): MessageGroup[] {
     last.assistant.push(msg);
   }
   return groups;
+}
+
+/** 右侧面板内：无 sessionId 时用与主会话相同的 message/tool 组件，由 part 合成一条 user + assistant 用 MessageBubble 渲染 */
+function SubagentFallbackView({
+  part,
+  getCommand,
+  getOutput,
+  onRefetchMain,
+}: {
+  part: ToolPartRender;
+  getCommand: (p: ToolPartRender) => string;
+  getOutput?: (p: ToolPartRender) => string;
+  onRefetchMain?: () => void;
+}) {
+  const command = getCommand(part);
+  const output = (getOutput ? getOutput(part) : (part.state?.output ?? "").trim()) || "";
+  const showDebug = isDebugSubagent();
+
+  const syntheticGroup = useMemo((): MessageGroup => {
+    const userMsg: MessageWithParts = {
+      info: { id: "subagent-fallback-user", sessionID: "", role: "user" },
+      parts: [{ type: "text", id: "subagent-fallback-user-text", text: command || "(无)" }],
+    };
+    const assistantParts: MessagePart[] = [
+      { ...part, type: "tool", id: part.id ?? "subagent-fallback-tool", tool: part.tool ?? "subagent", state: part.state },
+    ];
+    if (output) {
+      assistantParts.push({ type: "text", id: "subagent-fallback-output", text: output });
+    }
+    const assistantMsg: MessageWithParts = {
+      info: { id: "subagent-fallback-assistant", sessionID: "", role: "assistant" },
+      parts: assistantParts,
+    };
+    return {
+      id: "subagent-fallback-group",
+      user: userMsg,
+      assistant: [assistantMsg],
+    };
+  }, [part, command, output]);
+
+  return (
+    <>
+      <div className="space-y-0 pb-6">
+        <section className="mb-5">
+          {syntheticGroup.user && <MessageBubble msg={syntheticGroup.user} isUser />}
+          <div className="space-y-0">
+            {syntheticGroup.assistant.map((msg) => (
+              <MessageBubble
+                key={msg.info.id}
+                msg={msg}
+                isUser={false}
+                isStreaming={false}
+                onRefetchForIncompleteQuestion={onRefetchMain}
+                onOpenSubagentPanel={undefined}
+              />
+            ))}
+          </div>
+        </section>
+      </div>
+      {showDebug && (
+        <SubagentDebugStrip mode="fallback" part={part} onRefetchMain={onRefetchMain} />
+      )}
+    </>
+  );
+}
+
+/** 右侧面板调试：?debug=1 或 localStorage aigo.debugMessages / aigo.debugSubagent 为 true 时显示 */
+function isDebugSubagent(): boolean {
+  try {
+    if (typeof window === "undefined") return false;
+    if (new URLSearchParams(window.location.search).get("debug") === "1") return true;
+    return localStorage.getItem("aigo.debugMessages") === "true" || localStorage.getItem("aigo.debugSubagent") === "true";
+  } catch {
+    return false;
+  }
+}
+
+/** 子任务面板底部调试条：模式、part 摘要、刷新按钮 */
+function SubagentDebugStrip({
+  mode,
+  sessionId,
+  messageCount,
+  isLoading,
+  isSessionBusy,
+  lastRefetchAt,
+  onRefetchSubagent,
+  part,
+  onRefetchMain,
+}: {
+  mode: "session" | "fallback";
+  sessionId?: string | null;
+  messageCount?: number;
+  isLoading?: boolean;
+  isSessionBusy?: boolean;
+  lastRefetchAt?: number | null;
+  onRefetchSubagent?: () => void;
+  part?: ToolPartRender | null;
+  onRefetchMain?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-3 border-t border-zinc-200 pt-2 dark:border-zinc-700">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+      >
+        {open ? "收起 调试" : "展开 调试"}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-1.5 font-mono text-[10px] text-zinc-500 dark:text-zinc-400">
+          <p>模式: {mode === "session" ? `sessionId=${sessionId ?? ""}` : "fallback（无 sessionId）"}</p>
+          {mode === "session" && (
+            <>
+              <p>messageCount={messageCount} isLoading={String(isLoading)} isSessionBusy={String(isSessionBusy)}</p>
+              {lastRefetchAt != null && <p>lastRefetchAt={new Date(lastRefetchAt).toLocaleTimeString()}</p>}
+              {onRefetchSubagent && (
+                <button
+                  type="button"
+                  onClick={onRefetchSubagent}
+                  className="rounded bg-zinc-200 px-1.5 py-0.5 hover:bg-zinc-300 dark:bg-zinc-600 dark:hover:bg-zinc-500"
+                >
+                  手动刷新子任务
+                </button>
+              )}
+            </>
+          )}
+          {mode === "fallback" && part && (
+            <>
+              <p>part.state: status={String(part.state?.status)} hasOutput={String(!!part.state?.output)} outputLen={(part.state?.output ?? "").length}</p>
+              <p>state keys: {part.state ? Object.keys(part.state).join(", ") : "—"}</p>
+              {onRefetchMain && (
+                <button
+                  type="button"
+                  onClick={onRefetchMain}
+                  className="rounded bg-zinc-200 px-1.5 py-0.5 hover:bg-zinc-300 dark:bg-zinc-600 dark:hover:bg-zinc-500"
+                >
+                  刷新主会话（更新 part）
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 右侧面板内：有子任务 sessionId 时，与主会话一致的 session 消息展示（含 SSE 监听与实时更新） */
+function SubagentSessionView({ sessionId }: { sessionId: string }) {
+  const {
+    messages,
+    isLoading,
+    isSessionBusy,
+    refetch: refetchMessages,
+  } = useSessionMessages(sessionId);
+  const groupedMessages = useMemo(() => groupMessagesByTurn(messages), [messages]);
+  const streamingMessageId = useMemo(() => {
+    const all = groupedMessages.flatMap((g) => g.assistant);
+    const last = all[all.length - 1];
+    return isSessionBusy && last ? last.info.id : null;
+  }, [groupedMessages, isSessionBusy]);
+  const [lastRefetchAt, setLastRefetchAt] = useState<number | null>(null);
+  const handleRefetch = useCallback(() => {
+    refetchMessages();
+    setLastRefetchAt(Date.now());
+  }, [refetchMessages]);
+  const showDebug = isDebugSubagent();
+
+  if (isLoading && messages.length === 0) {
+    return (
+      <>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">加载子任务消息…</p>
+        {showDebug && (
+          <SubagentDebugStrip
+            mode="session"
+            sessionId={sessionId}
+            messageCount={0}
+            isLoading={isLoading}
+            isSessionBusy={isSessionBusy}
+            lastRefetchAt={lastRefetchAt}
+            onRefetchSubagent={handleRefetch}
+          />
+        )}
+      </>
+    );
+  }
+  if (groupedMessages.length === 0 && !isSessionBusy) {
+    return (
+      <>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">暂无消息</p>
+        {showDebug && (
+          <SubagentDebugStrip
+            mode="session"
+            sessionId={sessionId}
+            messageCount={0}
+            isLoading={isLoading}
+            isSessionBusy={isSessionBusy}
+            lastRefetchAt={lastRefetchAt}
+            onRefetchSubagent={handleRefetch}
+          />
+        )}
+      </>
+    );
+  }
+  return (
+    <>
+      <div className="space-y-0 pb-6">
+        {groupedMessages.map((group, groupIndex) => {
+          const nextUserMessageText =
+            groupedMessages[groupIndex + 1]?.user != null
+              ? getMessageText(groupedMessages[groupIndex + 1].user!)
+              : undefined;
+          return (
+            <section key={group.id} className="mb-5">
+              {group.user && <MessageBubble msg={group.user} isUser />}
+              <div className="space-y-0">
+                {group.assistant.map((msg) => (
+                  <MessageBubble
+                    key={msg.info.id}
+                    msg={msg}
+                    isUser={false}
+                    isStreaming={msg.info.id === streamingMessageId}
+                    nextUserMessageText={nextUserMessageText}
+                    onRefetchForIncompleteQuestion={refetchMessages}
+                    onOpenSubagentPanel={undefined}
+                  />
+                ))}
+              </div>
+            </section>
+          );
+        })}
+        {isSessionBusy && (
+          <div className="mb-3 flex justify-start">
+            <span className="thinking-cursor text-zinc-500 dark:text-zinc-400">|</span>
+          </div>
+        )}
+      </div>
+      {showDebug && (
+        <SubagentDebugStrip
+          mode="session"
+          sessionId={sessionId}
+          messageCount={messages.length}
+          isLoading={isLoading}
+          isSessionBusy={isSessionBusy}
+          lastRefetchAt={lastRefetchAt}
+          onRefetchSubagent={handleRefetch}
+        />
+      )}
+    </>
+  );
 }
 
 function isLikelyTextFile(file: File): boolean {
@@ -247,6 +502,8 @@ function MessageBubble({
   onQuestionAnswer,
   nextUserMessageText,
   onRefetchForIncompleteQuestion,
+  onOpenSubagentPanel,
+  isSubagentPanelOpenFor,
 }: {
   msg: MessageWithParts;
   isUser: boolean;
@@ -254,6 +511,8 @@ function MessageBubble({
   onQuestionAnswer?: (answerText: string) => void;
   nextUserMessageText?: string;
   onRefetchForIncompleteQuestion?: () => void;
+  onOpenSubagentPanel?: (part: ToolPartRender, messageId?: string) => void;
+  isSubagentPanelOpenFor?: (part: ToolPartRender, messageId?: string) => boolean;
 }) {
   if (isUser) {
     return <UserMessageBlock msg={msg} />;
@@ -287,6 +546,9 @@ function MessageBubble({
                   onQuestionAnswer,
                   nextUserMessageText,
                   onRefetchForIncompleteQuestion,
+                  onOpenSubagentPanel,
+                  isSubagentPanelOpenFor,
+                  messageId: msg.info.id,
                 }}
               />
             );
@@ -350,9 +612,157 @@ export function Session() {
   const [input, setInput] = useState("");
   const [selectedModel, setSelectedModel] = useState(() => readDefaultModel());
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [subagentPanelPart, setSubagentPanelPart] = useState<ToolPartRender | null>(null);
+  const [subagentPanelMessageId, setSubagentPanelMessageId] = useState<string | null>(null);
+
+  const subagentPanelPartLive = useMemo(() => {
+    if (!subagentPanelPart) return null;
+    if (!subagentPanelMessageId || !messages.length) {
+      // #region agent log
+      fetch("http://127.0.0.1:7384/ingest/52a81ad1-6528-4dca-9c42-33bc440a4a2f", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "fa953f" },
+        body: JSON.stringify({
+          sessionId: "fa953f",
+          hypothesisId: "B",
+          location: "Session.tsx:subagentPanelPartLive",
+          message: "live skip",
+          data: { subagentPanelMessageId, messagesLen: messages.length, reason: !subagentPanelMessageId ? "noMessageId" : "noMessages" },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      return subagentPanelPart;
+    }
+    const msg = messages.find((m) => m.info.id === subagentPanelMessageId);
+    if (!msg?.parts) {
+      // #region agent log
+      fetch("http://127.0.0.1:7384/ingest/52a81ad1-6528-4dca-9c42-33bc440a4a2f", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "fa953f" },
+        body: JSON.stringify({
+          sessionId: "fa953f",
+          hypothesisId: "B",
+          location: "Session.tsx:subagentPanelPartLive",
+          message: "msg not found",
+          data: { subagentPanelMessageId, messagesLen: messages.length, msgFound: false },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      return subagentPanelPart;
+    }
+    const partId = (subagentPanelPart as { id?: string }).id;
+    const toolName = subagentPanelPart.tool;
+    const found = msg.parts.find((p) => {
+      if (!p || typeof p !== "object" || (p as { type?: string }).type !== "tool") return false;
+      const tp = p as { id?: string; tool?: string };
+      if (partId && tp.id === partId) return true;
+      if (!partId && tp.tool === toolName) return true;
+      return false;
+    });
+    const resolved = found ? (found as ToolPartRender) : subagentPanelPart;
+    // #region agent log
+    const sid = getSubagentSessionId(resolved);
+    const out = getSubagentOutput(resolved);
+    fetch("http://127.0.0.1:7384/ingest/52a81ad1-6528-4dca-9c42-33bc440a4a2f", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "fa953f" },
+      body: JSON.stringify({
+        sessionId: "fa953f",
+        hypothesisId: "B",
+        location: "Session.tsx:subagentPanelPartLive",
+        message: "live resolved",
+        data: {
+          msgFound: true,
+          partFound: !!found,
+          subagentSessionId: sid ?? null,
+          outputLen: out?.length ?? 0,
+          resolvedStateKeys: resolved.state ? Object.keys(resolved.state) : [],
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+    return resolved;
+  }, [messages, subagentPanelPart, subagentPanelMessageId]);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messageInputRef = useRef<MessageInputRef>(null);
+
+  const isSubagentPanelOpenFor = useCallback(
+    (part: ToolPartRender, messageId?: string) => {
+      const current = subagentPanelPartLive ?? subagentPanelPart;
+      if (!current) return false;
+      if (subagentPanelMessageId !== messageId) return false;
+      const currentId = (current as { id?: string }).id;
+      const partId = (part as { id?: string }).id;
+      if (currentId != null && partId != null) return currentId === partId;
+      return current.tool === part.tool;
+    },
+    [subagentPanelPartLive, subagentPanelPart, subagentPanelMessageId]
+  );
+
+  const openSubagentPanel = useCallback(
+    (part: ToolPartRender, messageId?: string) => {
+      const sid = getSubagentSessionId(part);
+      const out = getSubagentOutput(part);
+
+      const prev = subagentPanelPart;
+      const prevId = (prev as { id?: string } | null)?.id;
+      const nextId = (part as { id?: string }).id;
+      const prevSid = prev ? getSubagentSessionId(prev) : null;
+      const sameById = !!prevId && !!nextId && prevId === nextId;
+      const sameByToolAndSession =
+        !!prev && !prevId && !nextId && prev.tool === part.tool && prevSid === sid;
+      const isSame = sameById || sameByToolAndSession;
+
+      if (isSame) {
+        setSubagentPanelPart(null);
+        setSubagentPanelMessageId(null);
+        return;
+      }
+
+      // #region agent log
+      fetch("http://127.0.0.1:7384/ingest/52a81ad1-6528-4dca-9c42-33bc440a4a2f", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "fa953f" },
+        body: JSON.stringify({
+          sessionId: "fa953f",
+          hypothesisId: "A",
+          location: "Session.tsx:openSubagentPanel",
+          message: "panel opened",
+          data: {
+            messageId: messageId ?? null,
+            partId: (part as { id?: string }).id,
+            tool: part.tool,
+            stateKeys: part.state ? Object.keys(part.state) : [],
+            subagentSessionId: sid ?? null,
+            outputLen: out?.length ?? 0,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      console.log("[aigo:subagent] panel opened (once)", {
+        tool: part.tool,
+        subagentSessionId: sid ?? null,
+        stateKeys: part.state ? Object.keys(part.state) : [],
+        hasOutput: !!getSubagentOutput(part),
+        hint: "?debug=1 或 localStorage aigo.debugSubagent='true' 可看更多 SSE 日志",
+      });
+      setSubagentPanelPart(part);
+      setSubagentPanelMessageId(messageId ?? null);
+      refetchMessages();
+    },
+    [refetchMessages, subagentPanelPart]
+  );
+  const closeSubagentPanel = useCallback(() => {
+    setSubagentPanelPart(null);
+    setSubagentPanelMessageId(null);
+  }, []);
+
 
   // 从「新建会话」页带着 initialMessage 跳转过来时，在首轮拉取完成后再发送首条消息，避免被 fetchMessages 的 setMessages([]) 覆盖乐观更新
   useEffect(() => {
@@ -547,78 +957,81 @@ export function Session() {
   }
 
   return (
-    <div className="relative flex h-full flex-col">
-      {pendingPermission && (
-        <PermissionDialog
-          request={pendingPermission}
-          onRespond={respondToPermission}
-        />
-      )}
-      <div className="px-6 pb-3 pt-5 shrink-0">
-        <div className="w-full max-w-3xl">
-          <h1 className="page-header mb-0 truncate" title={sessionTitle}>
-            {sessionTitle}
-          </h1>
+    <div className="flex h-full min-h-0">
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        {pendingPermission && (
+          <PermissionDialog
+            request={pendingPermission}
+            onRespond={respondToPermission}
+          />
+        )}
+        <div className="px-6 pb-3 pt-5 shrink-0">
+          <div className="w-full max-w-3xl">
+            <h1 className="page-header mb-0 truncate" title={sessionTitle}>
+              {sessionTitle}
+            </h1>
+          </div>
         </div>
-      </div>
-      {error && (
-        <div className="px-6 shrink-0">
-          <p className="mx-auto mb-3 w-full max-w-3xl rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
-            {error}
-          </p>
+        {error && (
+          <div className="px-6 shrink-0">
+            <p className="mx-auto mb-3 w-full max-w-3xl rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
+              {error}
+            </p>
+          </div>
+        )}
+        {sendError && (
+          <div className="px-6 shrink-0">
+            <p className="mx-auto mb-3 w-full max-w-3xl rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
+              {sendError}
+            </p>
+          </div>
+        )}
+        {/* 消息区 z-index:1 确保在渐变层之上，question 选项/提交按钮可点击 */}
+        <div ref={scrollRef} className="relative z-[1] min-h-0 flex-1 overflow-y-auto px-6">
+          <div className="mx-auto w-full max-w-3xl pb-[220px]">
+            {isLoading && messages.length === 0 ? (
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">加载消息…</p>
+            ) : groupedMessages.length === 0 && !isSessionBusy ? (
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">暂无消息，在下方输入并发送开始对话。</p>
+            ) : (
+              <>
+                {groupedMessages.map((group, groupIndex) => {
+                  const nextUserMessageText =
+                    groupedMessages[groupIndex + 1]?.user != null
+                      ? getMessageText(groupedMessages[groupIndex + 1].user!)
+                      : undefined;
+                  return (
+                    <section key={group.id} className="mb-5">
+                      {group.user && <MessageBubble msg={group.user} isUser />}
+                      <div className="space-y-0">
+                        {group.assistant.map((msg) => (
+                          <MessageBubble
+                            key={msg.info.id}
+                            msg={msg}
+                            isUser={false}
+                            isStreaming={msg.info.id === streamingMessageId}
+                            onQuestionAnswer={onQuestionAnswer}
+                            nextUserMessageText={nextUserMessageText}
+                            onRefetchForIncompleteQuestion={refetchMessages}
+                            onOpenSubagentPanel={openSubagentPanel}
+                            isSubagentPanelOpenFor={isSubagentPanelOpenFor}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  );
+                })}
+                {isSessionBusy && (
+                  <div className="mb-3 flex justify-start">
+                    <span className="thinking-cursor text-zinc-500 dark:text-zinc-400">|</span>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>
-      )}
-      {sendError && (
-        <div className="px-6 shrink-0">
-          <p className="mx-auto mb-3 w-full max-w-3xl rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
-            {sendError}
-          </p>
-        </div>
-      )}
-      {/* 消息区 z-index:1 确保在渐变层之上，question 选项/提交按钮可点击 */}
-      <div ref={scrollRef} className="relative z-[1] min-h-0 flex-1 overflow-y-auto px-6">
-        <div className="mx-auto w-full max-w-3xl pb-[220px]">
-          {isLoading && messages.length === 0 ? (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">加载消息…</p>
-          ) : groupedMessages.length === 0 && !isSessionBusy ? (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">暂无消息，在下方输入并发送开始对话。</p>
-          ) : (
-            <>
-              {groupedMessages.map((group, groupIndex) => {
-                const nextUserMessageText =
-                  groupedMessages[groupIndex + 1]?.user != null
-                    ? getMessageText(groupedMessages[groupIndex + 1].user!)
-                    : undefined;
-                return (
-                  <section key={group.id} className="mb-5">
-                    {group.user && <MessageBubble msg={group.user} isUser />}
-                    <div className="space-y-0">
-                      {group.assistant.map((msg) => (
-                        <MessageBubble
-                          key={msg.info.id}
-                          msg={msg}
-                          isUser={false}
-                          isStreaming={msg.info.id === streamingMessageId}
-                          onQuestionAnswer={onQuestionAnswer}
-                          nextUserMessageText={nextUserMessageText}
-                          onRefetchForIncompleteQuestion={refetchMessages}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                );
-              })}
-              {isSessionBusy && (
-                <div className="mb-3 flex justify-start">
-                  <span className="thinking-cursor text-zinc-500 dark:text-zinc-400">|</span>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-      {/* 整个输入区为 absolute，背景为自下而上的渐变（与页面背景衔接） */}
-      <div className="absolute bottom-0 left-0 right-0 z-[2] bg-gradient-to-t from-[var(--color-bg)] to-transparent px-6 pb-4 pt-24">
+        {/* 整个输入区为 absolute，背景为自下而上的渐变（与页面背景衔接） */}
+        <div className="absolute bottom-0 left-0 right-0 z-[2] bg-gradient-to-t from-[var(--color-bg)] to-transparent px-6 pb-4 pt-24">
         <form
           onSubmit={handleSubmit}
           className="mx-auto w-full max-w-3xl rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700/60 dark:bg-zinc-900"
@@ -690,6 +1103,64 @@ export function Session() {
           </div>
         </form>
       </div>
+      </div>
+      {subagentPanelPart && (() => {
+        const part = subagentPanelPartLive ?? subagentPanelPart;
+        const sid = getSubagentSessionId(part);
+        // #region agent log
+        fetch("http://127.0.0.1:7384/ingest/52a81ad1-6528-4dca-9c42-33bc440a4a2f", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "fa953f" },
+          body: JSON.stringify({
+            sessionId: "fa953f",
+            hypothesisId: "D",
+            location: "Session.tsx:panel render",
+            message: "panel render",
+            data: {
+              useLive: part === subagentPanelPartLive,
+              branch: sid ? "SubagentSessionView" : "SubagentFallbackView",
+              subagentSessionId: sid ?? null,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
+        return (
+          <aside
+            className="flex w-[min(400px,100%)] shrink-0 flex-col border-l border-zinc-200 bg-zinc-50/80 dark:border-zinc-700 dark:bg-zinc-900/80"
+            aria-label="子任务详情面板"
+          >
+            <div className="flex items-center justify-between border-b border-zinc-200 px-2.5 py-1.5 dark:border-zinc-700">
+              <span className="flex items-center gap-2 text-sm font-medium text-zinc-700 dark:text-zinc-200">
+                <PanelRightOpen className="h-4 w-4 text-zinc-500 dark:text-zinc-400" />
+                子任务详情
+              </span>
+              <button
+                type="button"
+                onClick={closeSubagentPanel}
+                className="rounded p-1 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-200"
+                aria-label="关闭面板"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="relative min-h-0 flex-1 overflow-y-auto px-4">
+              <div className="mx-auto w-full max-w-3xl pb-4">
+                {getSubagentSessionId(part) ? (
+                  <SubagentSessionView sessionId={getSubagentSessionId(part)!} />
+                ) : (
+                  <SubagentFallbackView
+                    part={part}
+                    getCommand={getSubagentCommand}
+                    getOutput={getSubagentOutput}
+                    onRefetchMain={refetchMessages}
+                  />
+                )}
+              </div>
+            </div>
+          </aside>
+        );
+      })()}
     </div>
   );
 }
